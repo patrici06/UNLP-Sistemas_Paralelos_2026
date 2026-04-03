@@ -1,0 +1,160 @@
+╔════════════════════════════════════════════════════════════════════════════════════╗
+║   MULTIPLICACIÓN DE MATRIZ DENSA × MATRIZ TRIANGULAR INFERIOR (COMPRIMIDA)         ║
+║                                                                                    ║
+║   C = A × BT  donde BT es triangular inferior de NxN                               ║
+╚════════════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  CONFIGURACIÓN DE DATOS (N=4)
+═══════════════════════════════════════════════════════════════════════════════════════
+
+Matriz A (4×4) - Todas columnas 0, menos última que es 1:
+┌           ┐
+│  0  0  0  1 │    Cada fila solo tiene un 1
+│  0  0  0  1 │    en la última columna
+│  0  0  0  1 │    (para propósito de prueba)
+│  0  0  0  1 │
+└           ┘
+
+Matriz BT (4×4) - Triangular inferior:
+┌           ┐                Almacenamiento:
+│  N  0  0  0 │               Col 0: N
+│  N  N  0  0 │    →          Col 1: N N
+│  N  N  N  0 │               Col 2: N N N
+│  N  N  N  N │               Col 3: N N N N
+└           ┘
+                   Solo ~(4×5)/2 = 10 elementos en vez de 16
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  EJEMPLO: Calcular C[2,1] = Fila 2 de A × Columna 1 de BT
+═══════════════════════════════════════════════════════════════════════════════════════
+
+SIN OPTIMIZACIÓN (loop k = 0 hasta N-1):
+───────────────────────────────────────
+C[2,1] = A[2,0]×BT[0,1]  +  A[2,1]×BT[1,1]  +  A[2,2]×BT[2,1]  +  A[2,3]×BT[3,1]
+       =  0 × 0          +   0 × N          +   0 × N          +   1 × N
+       = 0                + 0                + 0                + N
+       = N
+
+       ¡3 operaciones INÚTILES (multiplicar por 0)!
+
+
+CON OPTIMIZACIÓN (loop k = j hasta N-1, siendo j=1):
+──────────────────────────────────────────────────
+       j↓
+C[2,1] = A[2,1]×BT[1,1]  +  A[2,2]×BT[2,1]  +  A[2,3]×BT[3,1]
+       =  0 × N          +   0 × N          +   1 × N
+       = 0                + 0                + N
+       = N
+
+       ¡Se EVITAN los primeros 0s porque BT[k,1]=0 para todo k<1!
+
+
+¿POR QUÉ k=j?
+─────────────
+En una matriz triangular inferior: BT[i,j] = 0 si i < j
+
+    BT (triangular inferior, indexed como [fila, columna]):
+    ┌           ┐
+    │ ★ □ □ □  │  Fila 0: ★ en diagonal, □ ceros arriba
+    │ ★ ★ □ □  │  Fila 1: ★ en diagonal y bajo
+    │ ★ ★ ★ □  │  Fila 2: ★ en diagonal y bajo
+    │ ★ ★ ★ ★  │  Fila 3: Todo ★
+    └           ┘
+    Col 0 1 2 3
+
+Para columna j, solo las FILAS k ≥ j tienen elementos válidos:
+    - Columna 0: filas 0,1,2,3  ← all rows
+    - Columna 1: filas 1,2,3    ← start from row 1
+    - Columna 2: filas 2,3      ← start from row 2
+    - Columna 3: filas 3        ← start from row 3
+
+Entonces iteramos: for(k=j; k<N; k++)  ✓ CORRECTO
+
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  ALMACENAMIENTO COMPRIMIDO: Fórmula de Índice
+═══════════════════════════════════════════════════════════════════════════════════════
+
+En memoria, BT se guarda en un ARRAY 1D compactado por COLUMNAS:
+
+Matriz BT original:          Array comprimido BT[]:
+┌           ┐
+│ b₀₀  0    0    0   │     Columna 0: [b₀₀, b₁₀, b₂₀, b₃₀]      índices 0-3
+│ b₁₀  b₁₁ 0    0   │     Columna 1: [b₁₁, b₂₁, b₃₁]            índices 4-6
+│ b₂₀  b₂₁ b₂₂ 0   │     Columna 2: [b₂₂, b₃₂]                  índices 7-8
+│ b₃₀  b₃₁ b₃₂ b₃₃ │     Columna 3: [b₃₃]                       índice 9
+└           ┘
+
+FÓRMULA PARA ACCEDER A BT[k,j]:
+    index = j*N - j*(j+1)/2 + k
+
+DESGLOSE:
+    offset_columna = j*N - j*(j+1)/2
+    index = offset_columna + k
+
+EJEMPLO: ¿Dónde está BT[3,1]?
+    offset_col_1 = 1*4 - 1*2/2 = 4 - 1 = 3     ← comienza en índice 3
+    index = 3 + 3 = 6
+
+    Memoria BT[]: [b₀₀, b₁₀, b₂₀, b₃₀, b₁₁, b₂₁, b₃₁, b₂₂, b₃₂, b₃₃]
+    Índice:       [ 0    1    2    3    4    5    6    7    8    9  ]
+                                             ↑         ↑
+                                           offset    offset+3
+                                           columna    = BT[3,1]
+
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  LOOP PRINCIPAL DEL ALGORITMO
+═══════════════════════════════════════════════════════════════════════════════════════
+
+for(i=0; i<N; i++)               // Para cada FILA de A (y resultado C)
+  for(j=0; j<N; j++)             // Para cada COLUMNA de BT (y resultado C)
+    double suma = 0;
+    for(k=j; k<N; k++)           // ← DESDE j, no desde 0 ✓
+      int indexBT = j*N - j*(j+1)/2 + k;  // ← Fórmula comprimida
+      suma += A[i*k] * BT[indexBT];
+    C[i*j] = suma;
+
+    ┌─────────────────────────────────────┐
+    │ AHORRO COMPUTACIONAL CON k=j:       │
+    │                                     │
+    │ Sin optimización: N³   operaciones  │
+    │ Con k=j:         N³/2  operaciones  │
+    │ Ahorro:          ≈50%  ✓✓✓         │
+    └─────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  EJECUCIÓN VISUAL PASO A PASO (N=4)
+═══════════════════════════════════════════════════════════════════════════════════════
+
+Cálculo de C[0,0]:
+  j=0: indexBT = 0*4 - 0*1/2 + 0 = 0  →  A[0,0]×BT[0,0] = 0×N = 0
+  j=0: indexBT = 0*4 - 0*1/2 + 1 = 1  →  A[0,1]×BT[1,0] = 0×N = 0
+  j=0: indexBT = 0*4 - 0*1/2 + 2 = 2  →  A[0,2]×BT[2,0] = 0×N = 0
+  j=0: indexBT = 0*4 - 0*1/2 + 3 = 3  →  A[0,3]×BT[3,0] = 1×N = N  ✓
+  C[0,0] = N
+
+Cálculo de C[0,1]:
+  j=1: indexBT = 1*4 - 1*2/2 + 1 = 4  →  A[0,1]×BT[1,1] = 0×N = 0
+  j=1: indexBT = 1*4 - 1*2/2 + 2 = 5  →  A[0,2]×BT[2,1] = 0×N = 0
+  j=1: indexBT = 1*4 - 1*2/2 + 3 = 6  →  A[0,3]×BT[3,1] = 1×N = N  ✓
+  C[0,1] = N
+
+
+═══════════════════════════════════════════════════════════════════════════════════════
+  CONCLUSIÓN
+═══════════════════════════════════════════════════════════════════════════════════════
+
+✓ Iteramos k=j porque la matriz BT es TRIANGULAR INFERIOR
+  → Todos los elementos BT[i,j] con i<j son CERO
+
+✓ Usamos fórmula comprimida: index = j*N - j*(j+1)/2 + k
+  → Acceso O(1) sin cálculos adicionales
+  → Ahorro de ~50% en memoria vs matriz completa
+
+✓ El resultado es correcto: C[i][j] = suma de productos válidos
+  → Todas las filas de C contienen N (suma de N elementos = N×N)
+
+════════════════════════════════════════════════════════════════════════════════════════
