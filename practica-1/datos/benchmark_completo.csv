@@ -1,0 +1,33 @@
+block_size,optimization,directory,n_entrada,tiempo_seg,gflops,archivo
+32,-O3 -march=native,resultados-03-march-native,512,0.562364,0.477334,output_166751.txt
+32,-O3 -march=native,resultados-03-march-native,4096,286.77455,0.479258,output_166754.txt
+32,-O3 -march=native,resultados-03-march-native,1024,4.52077,0.475026,output_166752.txt
+32,-O3 -march=native,resultados-03-march-native,2048,36.132407,0.47547,output_166753.txt
+32,-O3 -fopenmp,resultados-03-fopenmp,1024,4.496061,0.477637,output_166760.txt
+32,-O3 -fopenmp,resultados-03-fopenmp,2048,35.810499,0.479744,output_166761.txt
+32,-O3 -fopenmp,resultados-03-fopenmp,512,0.568901,0.471849,output_166759.txt
+32,-O3 -fopenmp,resultados-03-fopenmp,4096,286.720277,0.479349,output_166762.txt
+32,-O3,resultados-03,2048,36.109754,0.475768,output_166742.txt
+32,-O3,resultados-03,512,0.572261,0.469079,output_166740.txt
+32,-O3,resultados-03,1024,4.523536,0.474736,output_166741.txt
+32,-O3,resultados-03,4096,286.940251,0.478981,output_166743.txt
+32,-O3 -funroll-loops,resultados-03-funroll,4096,224.598326,0.611932,output_166758.txt
+32,-O3 -funroll-loops,resultados-03-funroll,1024,3.525571,0.609117,output_166756.txt
+32,-O3 -funroll-loops,resultados-03-funroll,512,0.442489,0.606649,output_166755.txt
+32,-O3 -funroll-loops,resultados-03-funroll,2048,28.126674,0.610803,output_166757.txt
+64,-O3 -march=native,resultados-03-march-native,2048,33.836498,0.507732,output_166777.txt
+64,-O3 -march=native,resultados-03-march-native,4096,276.231266,0.49755,output_166778.txt
+64,-O3 -march=native,resultados-03-march-native,1024,4.220721,0.508795,output_166776.txt
+64,-O3 -march=native,resultados-03-march-native,512,0.5289,0.507535,output_166775.txt
+64,-O3,resultados-03-fopemp,4096,280.220714,0.490467,output_166786.txt
+64,-O3,resultados-03-fopemp,1024,4.173474,0.514555,output_166784.txt
+64,-O3,resultados-03-fopemp,2048,33.49406,0.512923,output_166785.txt
+64,-O3,resultados-03-fopemp,512,0.528174,0.508233,output_166783.txt
+64,-O3,resultados-03,4096,278.054977,0.494287,output_166774.txt
+64,-O3,resultados-03,512,0.547145,0.490611,output_166771.txt
+64,-O3,resultados-03,2048,34.589794,0.496675,output_166773.txt
+64,-O3,resultados-03,1024,4.330729,0.495871,output_166772.txt
+64,-O3 -funroll-loops,resultados-03-fullroll,1024,3.355673,0.639956,output_166780.txt
+64,-O3 -funroll-loops,resultados-03-fullroll,2048,26.805267,0.640914,output_166781.txt
+64,-O3 -funroll-loops,resultados-03-fullroll,512,0.420876,0.637802,output_166779.txt
+64,-O3 -funroll-loops,resultados-03-fullroll,4096,215.195625,0.63867,output_166782.txt

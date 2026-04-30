@@ -4,7 +4,7 @@
 #include<math.h>
 #include<string.h>
 
-#define BS 32
+#define BS 64
 
 double dwalltime();
 

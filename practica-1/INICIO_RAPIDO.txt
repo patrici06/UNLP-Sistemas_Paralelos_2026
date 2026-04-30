@@ -1,0 +1,165 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                     SISTEMA DE REPORTES DE BENCHMARKS                      ║
+║                        GUÍA DE INICIO RÁPIDO                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📌 RUTA PRINCIPAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  /home/patricio/Escritorio/sistemas-paralelos/practica-1/
+
+
+🚀 OPCIÓN 1: USO RÁPIDO (RECOMENDADO)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Para regenerar TODOS los reportes:
+   
+   $ python3 run_all_reports.py
+
+   Esto genera automáticamente:
+   ✓ benchmark_report.csv (datos detallados)
+   ✓ benchmark_summary.csv (estadísticas)
+   ✓ 5 gráficos PNG
+   ✓ benchmark_report.html
+
+
+2. Los reportes se crean en:
+   
+   cluster/
+   ├── benchmark_report.csv
+   ├── benchmark_summary.csv
+   ├── benchmark_report.html
+   ├── graph_1_time_comparison.png
+   ├── graph_2_gflops_comparison.png
+   ├── graph_3_boxplot_times.png
+   ├── graph_4_heatmap_times.png
+   └── graph_5_speedup_comparison.png
+
+
+📖 OPCIÓN 2: LECTURA DE REPORTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Análisis Detallado (comienza aquí):
+  
+  $ cat REPORT_SUMMARY.md
+  
+  Contiene:
+  ✓ Resumen ejecutivo
+  ✓ Resultados principales
+  ✓ Análisis por método
+  ✓ Recomendaciones
+
+
+Documentación Completa:
+
+  $ cat README_REPORTES.md
+  
+  Contiene:
+  ✓ Descripción de archivos
+  ✓ Estructura de datos
+  ✓ Interpretación de gráficos
+  ✓ Guía de personalización
+
+
+Visualización Interactiva:
+
+  Abrir en navegador:
+  cluster/benchmark_report.html
+
+
+Datos Crudos:
+
+  Importar en Excel/Calc:
+  cluster/benchmark_report.csv
+  cluster/benchmark_summary.csv
+
+
+🎯 RESULTADOS PRINCIPALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BS32 (32 bits):
+  • Mejor compilación: 03-funroll
+  • Speedup: +22% vs baseline (-O3)
+  • GFLOPS: 0.6096
+
+BS64 (64 bits):  ⭐ RECOMENDADO
+  • Mejor compilación: 03-fullroll
+  • Speedup: +23% vs baseline (-O3)
+  • GFLOPS: 0.6393
+
+
+🔧 USO AVANZADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Ejecutar solo generador CSV/PNG:
+
+  $ python3 generate_reports.py
+
+Ejecutar solo generador HTML:
+
+  $ python3 generate_html_report.py
+
+Analizar con Python/pandas:
+
+  import pandas as pd
+  df = pd.read_csv('cluster/benchmark_report.csv')
+  print(df.groupby('Compilation')['Time_Output'].mean())
+
+
+💾 ESTRUCTURA DE DATOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CSV tiene columnas:
+  • Bitness: bs32 o bs64
+  • Compilation: método de compilación
+  • Entry_Size: tamaño de matriz (512, 1024, 2048, 4096)
+  • Time_Output: tiempo en segundos
+  • GFLOPS: gigaflops alcanzados
+
+
+📊 GRÁFICOS DISPONIBLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. graph_1_time_comparison.png
+   Comparativa de tiempos por tamaño de entrada
+   
+2. graph_2_gflops_comparison.png
+   Comparativa de GFLOPS por tamaño de entrada
+   
+3. graph_3_boxplot_times.png
+   Distribución estadística de tiempos
+   
+4. graph_4_heatmap_times.png
+   Mapa de calor de tiempos (visión general)
+   
+5. graph_5_speedup_comparison.png
+   Speedup relativo a baseline por compilación
+
+
+🐛 SOLUCIÓN DE PROBLEMAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Si falta pandas/matplotlib:
+  $ pip3 install pandas matplotlib seaborn
+
+Si no hay datos:
+  • Verificar que existen: bs32/ y bs64/
+  • Verificar que existen: resultados-* dentro
+  • Verificar que existen: output_*.txt con datos
+
+
+✅ LISTA DE VERIFICACIÓN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+☐ 1. python3 run_all_reports.py
+☐ 2. Leer REPORT_SUMMARY.md
+☐ 3. Abrir cluster/benchmark_report.html en navegador
+☐ 4. Ver gráficos PNG generados
+☐ 5. Importar CSVs en Excel para análisis detallado
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+¿Preguntas? Ver: README_REPORTES.md o REPORT_SUMMARY.md
+
+Última actualización: Abril 10, 2025
