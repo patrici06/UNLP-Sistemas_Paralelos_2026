@@ -3,34 +3,42 @@
 #include<sys/time.h>
 #include<math.h>
 #include<string.h>
+#include<omp.h>
 
 #define BS 32
 
 double dwalltime();
 void blkmul(double *ablk, double *bblk, double *cblk, int n);
-void matmulblks(double *a, double *b, double *c, int n); 
+void matmulblks(double *a, double *b, double *c, int n);
 void print_matrix(double *mat, int n, const char *name, int max_print);
 void transpose_matrix(double *mat, double *mat_t, int n);
 void transpose_block(double *mat, double *mat_t, int n);
 
 int main(int argc, char*argv[]) {
     double *a, *b, *bt, *d, *c, *r;
-    int i, j, k, n;
+    int i, j, k, n, num_threads;
     int print_matrices, nan_count, inf_count;
     double MaxA, MinA, PromA, MaxB, MinB, PromB;
     double timetick, workTime;
     double constante;
 
     print_matrices = 0;
+    num_threads = 2;
 
     if ((argc < 2) || ((n = atoi(argv[1])) <= 0) || ((n % BS) != 0)) {
-        printf("\nError: N debe ser multiplo de BS=%d\nUsar: %s N [print_matrices(0|1)]\n", BS, argv[0]);
+        printf("\nError: N debe ser multiplo de BS=%d\nUsar: %s N [num_threads(default=2)] [print_matrices(0|1)]\n", BS, argv[0]);
         exit(1);
     }
     
     if (argc >= 3) {
-        print_matrices = atoi(argv[2]);
+        num_threads = atoi(argv[2]);
     }
+    
+    if (argc >= 4) {
+        print_matrices = atoi(argv[3]);
+    }
+
+    omp_set_num_threads(num_threads);
 
     a = (double*) malloc(sizeof(double)*n*n);
     b = (double*) malloc(sizeof(double)*n*n);
@@ -39,7 +47,7 @@ int main(int argc, char*argv[]) {
     c = (double*) malloc(sizeof(double)*n*n);
     r = (double*) malloc(sizeof(double)*n*n);
 
-    // a y b en row-major coherente con accesos posteriores
+    // a y b en row-major
     for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
             a[i*n + j] = rand() % 10 + 1;
@@ -47,32 +55,26 @@ int main(int argc, char*argv[]) {
         }
     }
 
-    // d en row-major para consistencia con los cálculos
+    // d, c y r inicializadas
     for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
             d[i*n + j] = 0.0;
-        }
-    }
-
-    // c y r en row-major
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
             c[i*n + j] = 0.0;
             r[i*n + j] = 0.0;
         }
     }
 
-    // PRINT MATRICES (FUERA DE MEDICIÓN DE TIEMPO)
     if (print_matrices && n <= 8) {
         print_matrix(a, n, "MATRIZ A", n);
         print_matrix(b, n, "MATRIZ B", n);
     }
     
-    
     // INICIA MEDICIÓN DE TIEMPO
     timetick = dwalltime();
-    // TRANSPOSICIÓN DE B (dentro de medición de tiempo)
+    
+    // TRANSPOSICIÓN DE B (secuencial, bajo overhead relativo)
     transpose_matrix(b, bt, n);
+    
     //acceso secuencial para calcular maximo, minimo y promedio de A y B
     PromA = PromB = 0.0;
     MaxA = MinA = a[0];
@@ -94,13 +96,13 @@ int main(int argc, char*argv[]) {
     PromA /= (n*n);
     PromB /= (n*n);
 
-    // D = B^T * B usando algoritmo bloqueado (ambas row-major)
+    // D = B^T * B (paralelo con block tiling)
     matmulblks(bt, b, d, n);
     
-    // C = A * D usando algoritmo bloqueado (ambas row-major)
+    // C = A * D (paralelo con block tiling)
     matmulblks(a, d, c, n);
     
-    // r = constante * c (recorrido lineal)
+    // r = constante * c (secuencial, es linear scan)
     constante = ((MaxA * MaxB) - (MinA * MinB)) / (PromA * PromB);
 
     for (i = 0; i < n*n; i++) {
@@ -110,13 +112,12 @@ int main(int argc, char*argv[]) {
     workTime = dwalltime() - timetick;
     // FIN MEDICIÓN DE TIEMPO
 
-    // PRINT RESULTADOS (FUERA DE MEDICIÓN)
     if (print_matrices && n <= 8) {
         printf("\nCONSTANTE = (%.2f * %.2f - %.2f * %.2f) / (%.2f * %.2f) = %.6f\n",
                MaxA, MaxB, MinA, MinB, PromA, PromB, constante);
         print_matrix(d, n, "MATRIZ D = B^T * B", n);
         print_matrix(c, n, "MATRIZ C = A * D", n);
-        printf("\n=== RESULTADO RESULTADO ===\n");
+        printf("\n=== RESULTADO ===\n");
         print_matrix(r, n, "MATRIZ R", n);
     }
 
@@ -128,7 +129,7 @@ int main(int argc, char*argv[]) {
         if (isinf(r[i])) inf_count++;
     }
 
-    printf("RESULT;%d;%lf;%lf\n", n, workTime, ((double)2*n*n*n)/(workTime*1e9));
+    printf("RESULT;%d;%d;%lf;%lf\n", n, num_threads, workTime, ((double)2*n*n*n)/(workTime*1e9));
 
     if (nan_count == 0 && inf_count == 0)
         printf("VALIDATION;OK\n");
@@ -156,49 +157,46 @@ double dwalltime()
     gettimeofday(&tv, NULL);
     sec = tv.tv_sec + tv.tv_usec/1000000.0;
     return sec;
-
 }
+
 // ========================
 //  FUNCIONES
 // ========================
-/* Multiply square matrices, blocked version (row-major) */
+/* Multiply square matrices, blocked version (row-major) - PARALELO OpenMP */
 void matmulblks(double *a, double *b, double *c, int n)
 {
-  int i, j, k;    /* Índices de bloques */
-  // c ya viene inicializada
-  for (i = 0; i < n; i += BS)
-  {
-    int in = i * n;
-    for (k = 0; k < n; k += BS)
+    int i, j, k;
+    
+    #pragma omp parallel for collapse(1) schedule(static)
+    for (i = 0; i < n; i += BS)
     {
-      int kn = k * n;
-      for (j = 0; j < n; j += BS)
-      {
-        blkmul(&a[in + k], &b[kn + j], &c[in + j], n);
-      }
+        int in = i * n;
+        for (k = 0; k < n; k += BS)
+        {
+            int kn = k * n;
+            for (j = 0; j < n; j += BS)
+            {
+                blkmul(&a[in + k], &b[kn + j], &c[in + j], n);
+            }
+        }
     }
-  }
 }
-
-/*****************************************************************/
 
 /* Multiply (block)submatrices */
 void blkmul(double *ablk, double *bblk, double *cblk, int n)
 {
-  int i, j, k;    /* Índices dentro del bloque */
+    int i, j, k;
 
-  for (i = 0; i < BS; i++)
-  {
-    int in = i * n; 
-    for (k = 0; k < BS; k++)
-    {
-      int kn = k * n;
-      for (j = 0; j < BS; j++)
-      {
-        cblk[in + j] += ablk[in + k] * bblk[kn + j];
-      }
+    for (i = 0; i < BS; i++) {
+        int in = i * n;
+        for (k = 0; k < BS; k++) {
+            int kn = k * n;
+            double a_ik = ablk[in + k];
+            for (j = 0; j < BS; j++) {
+                cblk[in + j] += a_ik * bblk[kn + j];
+            }
+        }
     }
-  }
 }
 
 // ========================
@@ -248,6 +246,3 @@ void transpose_matrix(double *mat, double *mat_t, int n)
         }
     }
 }
-
-
-    
