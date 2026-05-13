@@ -1,8 +1,9 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<sys/time.h>
-#include<math.h>
-#include<string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <omp.h>
+#include <math.h>
+#include <string.h>
 
 #define BS 64
 
@@ -12,6 +13,15 @@ void matmulblks(double *a, double *b, double *c, int n);
 void print_matrix(double *mat, int n, const char *name, int max_print);
 void transpose_matrix(double *mat, double *mat_t, int n);
 void transpose_block(double *mat, double *mat_t, int n);
+
+double dwalltime() {
+    double sec;
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    sec = tv.tv_sec + tv.tv_usec/1000000.0;
+    return sec;
+}
 
 int main(int argc, char*argv[]) {
     double *a, *b, *bt, *d, *c, *r;
@@ -39,7 +49,8 @@ int main(int argc, char*argv[]) {
     c = (double*) malloc(sizeof(double)*n*n);
     r = (double*) malloc(sizeof(double)*n*n);
 
-    // a y b en row-major coherente con accesos posteriores
+    // a y b inicializadas en row-major coherente con accesos posteriores
+#pragma omp parallel for collapse(2) schedule(static)
     for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
             a[i*n + j] = rand() % 10 + 1;
@@ -47,14 +58,16 @@ int main(int argc, char*argv[]) {
         }
     }
 
-    // d en row-major para consistencia con los cálculos
+    // d inicializada en row-major para consistencia con los cálculos
+#pragma omp parallel for collapse(2) schedule(static)
     for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
             d[i*n + j] = 0.0;
         }
     }
 
-    // c y r en row-major
+    // c y r inicializadas en row-major
+#pragma omp parallel for collapse(2) schedule(static)
     for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
             c[i*n + j] = 0.0;
@@ -71,16 +84,22 @@ int main(int argc, char*argv[]) {
     
     // INICIA MEDICIÓN DE TIEMPO
     timetick = dwalltime();
-    // TRANSPOSICIÓN DE B (dentro de medición de tiempo)
+    
+#pragma omp parallel
+{
+    // TRANSPOSICIÓN DE B (dentro de medición de tiempo) con block tiling
     transpose_matrix(b, bt, n);
-    //acceso secuencial para calcular maximo, minimo y promedio de A y B
-    PromA = PromB = 0.0;
-    MaxA = MinA = a[0];
-    MaxB = MinB = b[0];
-
+    
+    // Cálculo de estadísticas: máximo, mínimo y promedio de A y B
+#pragma omp for reduction(max: MaxA, MaxB) reduction(min: MinA, MinB) reduction(+: PromA, PromB) schedule(static)
     for (i = 0; i < n*n; i++) {
         double valA = a[i];
         double valB = b[i];
+
+        if (i == 0) {
+            MaxA = MinA = valA;
+            MaxB = MinB = valB;
+        }
 
         if (valA > MaxA) MaxA = valA;
         if (valA < MinA) MinA = valA;
@@ -91,8 +110,12 @@ int main(int argc, char*argv[]) {
         PromB += valB;
     }
 
-    PromA /= (n*n);
-    PromB /= (n*n);
+#pragma omp single
+    {
+        PromA /= (n*n);
+        PromB /= (n*n);
+        constante = ((MaxA * MaxB) - (MinA * MinB)) / (PromA * PromB);
+    }
 
     // D = B^T * B usando algoritmo bloqueado (ambas row-major)
     matmulblks(bt, b, d, n);
@@ -100,12 +123,12 @@ int main(int argc, char*argv[]) {
     // C = A * D usando algoritmo bloqueado (ambas row-major)
     matmulblks(a, d, c, n);
     
-    // r = constante * c (recorrido lineal)
-    constante = ((MaxA * MaxB) - (MinA * MinB)) / (PromA * PromB);
-
+    // r = constante * c (recorrido lineal paralelo)
+#pragma omp for schedule(static)
     for (i = 0; i < n*n; i++) {
         r[i] = constante * c[i];
     }
+}
 
     workTime = dwalltime() - timetick;
     // FIN MEDICIÓN DE TIEMPO
@@ -146,34 +169,22 @@ int main(int argc, char*argv[]) {
 }
 
 // =========================
-// TIMER
+// FUNCIONES
 // =========================
-double dwalltime()
-{
-    double sec;
-    struct timeval tv;
-
-    gettimeofday(&tv, NULL);
-    sec = tv.tv_sec + tv.tv_usec/1000000.0;
-    return sec;
-
-}
-// ========================
-//  FUNCIONES
-// ========================
 /* Multiply square matrices, blocked version (row-major) */
 void matmulblks(double *a, double *b, double *c, int n)
 {
   int i, j, k;    /* Índices de bloques */
   // c ya viene inicializada
+#pragma omp for schedule(static) collapse(3)
   for (i = 0; i < n; i += BS)
   {
-    int in = i * n;
     for (k = 0; k < n; k += BS)
     {
-      int kn = k * n;
       for (j = 0; j < n; j += BS)
       {
+        int in = i * n;
+        int kn = k * n;
         blkmul(&a[in + k], &b[kn + j], &c[in + j], n);
       }
     }
@@ -242,6 +253,7 @@ void transpose_matrix(double *mat, double *mat_t, int n)
 {
     int bi, bj;
     
+#pragma omp for schedule(static) collapse(2)
     for (bi = 0; bi < n; bi += BS) {
         for (bj = 0; bj < n; bj += BS) {
             transpose_block(&mat[bi*n + bj], &mat_t[bj*n + bi], n);
@@ -250,4 +262,3 @@ void transpose_matrix(double *mat, double *mat_t, int n)
 }
 
 
-    

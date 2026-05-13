@@ -4,14 +4,13 @@
 #include<math.h>
 #include<string.h>
 
-#define BS 64
+#define BS 32
 
 double dwalltime();
 void blkmul(double *ablk, double *bblk, double *cblk, int n);
-void matmulblks(double *a, double *b, double *c, int n); 
+void matmulblks(double *a, double *b, double *c, int n);
 void print_matrix(double *mat, int n, const char *name, int max_print);
 void transpose_matrix(double *mat, double *mat_t, int n);
-void transpose_block(double *mat, double *mat_t, int n);
 
 int main(int argc, char*argv[]) {
     double *a, *b, *bt, *d, *c, *r;
@@ -224,27 +223,15 @@ void print_matrix(double *mat, int n, const char *name, int max_print)
     if (limit < n) printf("...\n");
 }
 
-/* Transpone un bloque de tamaño BS x BS */
-void transpose_block(double *mat, double *mat_t, int n)
+/* Transpone una matriz de n x n */
+void transpose_matrix(double *mat, double *mat_t, int n)
 {
     int i, j;
     
-    for (i = 0; i < BS; i++) {
+    for (i = 0; i < n; i++) {
         int in = i * n;
-        for (j = 0; j < BS; j++) {
+        for (j = 0; j < n; j++) {
             mat_t[j*n + i] = mat[in + j];
-        }
-    }
-}
-
-/* Transpone una matriz de n x n con block tiling para mejor cache locality */
-void transpose_matrix(double *mat, double *mat_t, int n)
-{
-    int bi, bj;
-    
-    for (bi = 0; bi < n; bi += BS) {
-        for (bj = 0; bj < n; bj += BS) {
-            transpose_block(&mat[bi*n + bj], &mat_t[bj*n + bi], n);
         }
     }
 }
