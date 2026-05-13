@@ -307,7 +307,7 @@ La ganancia por el uso de SMT depende fuertemente del programa a ejecutar. Gener
 
 **Ventajas de las cachés compartidas:**
 
-- Hilos en diferentes núcleos pueden共享 datos que están en la misma caché.
+- Hilos en diferentes núcleos pueden acceder a datos que están en la misma caché.
 - Más espacio de caché disponible si un único hilo se ejecuta en el procesador.
 
 ### Clusters
