@@ -1,0 +1,28 @@
+#!/bin/bash
+
+INDEX=$1
+echo "" > reporte_quad${INDEX}.txt
+
+if [ "$1" != 3 -a  "$1" != 2  ]; then
+  echo "error, el parametro debe ser 2 o 3"
+  exit
+fi
+
+for i in 100 200 300 500; do
+    sed -i "s/^#define TIMES.*/#define TIMES $i/" quadatric${INDEX}.c
+
+    ./compile.sh quadatric$INDEX.c quad$INDEX-$i
+    chmod +x quad$INDEX-$i
+    sbatch run.sh quad$INDEX-$i $i
+done
+
+# esperamos que termine de correr los archivos
+while [ $(squeue -u $USER | wc -l) -gt 1 ]; do
+    sleep 5
+done
+
+
+# generamos reporte:
+for i in 100 200 300 500; do
+    ./log.sh $i $INDEX
+done
