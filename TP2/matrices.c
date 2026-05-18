@@ -7,18 +7,15 @@
 
 #define BS 64
 
+
 double dwalltime();
 
-/* Multiply square matrices, blocked version */
-void matmulblks(double *a, double *b, double *c, int n, int bs, int order);
 //funciones especializadas para cada escenario de orden de almacenamiento
 //Mejora el performance y aprovecha optimizaciones del compilador
 void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs);
 void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs);
 
 
-/* Multiply (block)submatrices */
-void blkmul(double *ablk, double *bblk, double *cblk, int n, int bs, int order);
 //funciones especializadas para cada escenario de orden de almacenamiento
 //Mejora el performance y aprovecha optimizaciones del compilador
 void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs);
@@ -149,40 +146,6 @@ int main(int argc, char*argv[]) {
     return 0;
 }
 
-
-void matmulblks(double *a, double *b, double *c, int n, int bs, int order) {
-    int i, j, k;
-    int in, jn, kn;
-    
-    // Estructura optimizada: for i, for k, for j (k es dimensión de reducción)
-    // Esto aprovecha mejor la localidad caché
-    
-    for (i = 0; i < n; i += bs) {
-        in = i*n;
-        for (k = 0; k < n; k += bs) {
-            kn = k*n;
-            for (j = 0; j < n; j += bs) {
-                jn = j*n;
-                
-                if (order == 0) {
-                    // A, B, C todos row-major: C[i,j] = suma_k A[i,k] * B[k,j]
-                    blkmul(&a[in + k], &b[kn + j], &c[in + j], n, bs, order);
-                }
-                else if (order == 1) {
-                    // A, C row-major; D column-major: C[i,j] = suma_k A[i,k] * D[k,j]
-                    // &b[k*n + j*n] accede a D[k,j] en column-major
-                    blkmul(&a[in + k], &b[kn + jn], &c[in + j], n, bs, order);
-                }
-                else if (order == 2) {
-                    // B × B^T: D[i,j] = suma_k B[i,k] * B[j,k]
-                    // Resultado en column-major: D[i + j*n]
-                    blkmul(&a[in + k], &b[jn + k], &c[i + jn], n, bs, order);
-                }
-                //esta solucion podria extenderse para todos los escenarios posibles con diferentes combinaciones de orden de almacenamiento
-            }
-        }
-    }
-}
 //implementacion de las funciones especializadas para cada escenario de orden de almacenamiento
 void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C column-major
@@ -211,76 +174,36 @@ void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
     }
 }
 
-void blkmul(double *ablk, double *bblk, double *cblk, int n, int bs, int order) {
-    int i, j, k;
-    int in, jn, kn;
-    
-    // Estructura optimizada: reordena bucles para usar acumulador
-    // Reduces escrituras a cblk acumulando en sum hasta terminar el bucle k
-    
-    for (i = 0; i < bs; i++) {
-        in = i*n;
-        for (j = 0; j < bs; j++) {
-            jn = j*n;
-            double sum = 0.0;  // Acumulador para reducir asignaciones
-            
-            for (k = 0; k < bs; k++) {
-                kn = k*n;
-                
-                if (order == 0) {
-                    // A, B, C row-major: C[i,j] += A[i,k] * B[k,j]
-                    sum += ablk[in + k] * bblk[kn + j];
-                }
-                else if (order == 1) {
-                    // A, C row-major; D column-major: C[i,j] += A[i,k] * D[k,j]
-                    // D[k,j] en column-major está en bblk[k + j*n]
-                    sum += ablk[in + k] * bblk[k + jn];
-                }
-                else if (order == 2) {
-                    // B × B^T: D[i,j] += B[i,k] * B[j,k]
-                    // Resultado en column-major: D[i + j*n]
-                    sum += ablk[in + k] * bblk[jn + k];
-                }
-                //esta solucion podria extenderse para todos los escenarios posibles con diferentes combinaciones de orden de almacenamiento
-            }
-
-            // Asignación única después de terminar el bucle k
-            if (order == 0 || order == 1) {
-                cblk[in + j] += sum;
-            } else if (order == 2) {
-                cblk[i + jn] += sum;
-            }
-        }
-    }
-}
 void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C column-major
     for (int i = 0; i < bs; i++) {
         int in = i*n;
-        for (int j = 0; j < bs; j++) {
-            int jn = j*n;
+        for (int k = 0; k < bs; k++) {        
+            int kn = k*n;
             double sum = 0.0;
-            for (int k = 0; k < bs; k++) {
-                sum += ablk[in + k] * bblk[k + jn];
+                for (int j = 0; j < bs; j++) {
+            
+                    sum += ablk[in + k] * bblk[kn + j];
+                }
+                cblk[i + kn] += sum;
             }
-            cblk[i + jn] += sum;
-        }
     }
 }
 void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C row-major
     for (int i = 0; i < bs; i++) {
         int in = i*n;
-        for (int j = 0; j < bs; j++) {
-            int jn = j*n;
+        for (int k = 0; k < bs; k++) {
             double sum = 0.0;
-            for (int k = 0; k < bs; k++) {
-                sum += ablk[in + k] * bblk[k + jn];
+            int kn = k*n;  
+            for (int j = 0; j < bs; j++) {
+                sum += ablk[in + k] * bblk[kn + j];
             }
-            cblk[in + j] += sum;
+            cblk[in + k] += sum;
         }
     }
 }
+
 
 // =========================
 // TIMER
