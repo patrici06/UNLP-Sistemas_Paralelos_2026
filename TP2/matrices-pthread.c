@@ -13,11 +13,11 @@ double dwalltime();
 
 typedef struct {
     int thread_id;
-    int start_block;
-    int end_block;
+    int start_block_row;
+    int end_block_row;
     int N;
     int T;
-    int num_blocks;
+    int blocks_per_dim;
 } thread_args_t;
 
 void *matmulblksRowColColParallel(void *ptr);
@@ -104,17 +104,19 @@ int main(int argc, char*argv[]) {
     //inicializar el atributo de los threads
     pthread_attr_init(&attr);
     
-    // Asegura que n sea múltiplo de BS para distribución uniforme de bloques
-    int num_blocks = (n / BS) * (n / BS);
+    // Distribución de filas de bloques a threads
+    // blocks_per_dim: cantidad de bloques por dimensión (filas o columnas de bloques BS x BS)
+    int blocks_per_dim = n / BS;
+    int block_rows_per_thread = blocks_per_dim / t;
     
     //inicio los trabajos para primera multiplicación
     for (i = 0; i < t; i++) {
         args[i].thread_id = i;
-        args[i].start_block = i * (num_blocks / t);
-        args[i].end_block = (i == t - 1) ? num_blocks : (i + 1) * (num_blocks / t);
+        args[i].start_block_row = i * block_rows_per_thread;
+        args[i].end_block_row = (i == t - 1) ? blocks_per_dim : (i + 1) * block_rows_per_thread;
         args[i].N = n;
         args[i].T = t;
-        args[i].num_blocks = num_blocks;
+        args[i].blocks_per_dim = blocks_per_dim;
         pthread_create(&threads[i], &attr, matmulblksRowColColParallel, (void *) &args[i]);
     }
     //sincronizo antes de continuar
@@ -125,11 +127,11 @@ int main(int argc, char*argv[]) {
     //solucion especializada para el escenario row, col, row
     for (i = 0; i < t; i++) {
         args[i].thread_id = i;
-        args[i].start_block = i * (num_blocks / t);
-        args[i].end_block = (i == t - 1) ? num_blocks : (i + 1) * (num_blocks / t);
+        args[i].start_block_row = i * block_rows_per_thread;
+        args[i].end_block_row = (i == t - 1) ? blocks_per_dim : (i + 1) * block_rows_per_thread;
         args[i].N = n;
         args[i].T = t;
-        args[i].num_blocks = num_blocks;
+        args[i].blocks_per_dim = blocks_per_dim;
         pthread_create(&threads[i], &attr, matmulblksRowColRowParallel, (void *) &args[i]);
     }
     //sincronizo antes de continuar
@@ -188,50 +190,49 @@ int main(int argc, char*argv[]) {
 //implementacion de las funciones especializadas para cada escenario de orden de almacenamiento
 void * matmulblksRowColColParallel(void *ptr) {
     // Implementación especializada para A row-major, B column-major, C column-major
-    // C[i + j*n] += A[i*k] * B[k + j*n]
     // Copiar argumentos localmente para evitar race condition
     thread_args_t args_local = *((thread_args_t *) ptr);
-    
-    int start_block = args_local.start_block;
-    int end_block = args_local.end_block;
-    int n = args_local.N;
+    int start_block_row = (int)args_local.start_block_row;
+    int end_block_row = (int)args_local.end_block_row;
+    int n = (int)args_local.N;
     int bs = BS;
-    int num_blocks_per_dim = n / bs;
+    int blocks_per_dim = (int)args_local.blocks_per_dim;
     
-    for (int block_id = start_block; block_id < end_block; block_id++) {
-        int block_i = (block_id / num_blocks_per_dim) * bs;
-        int block_j = (block_id % num_blocks_per_dim) * bs;
-        
+    // Orden de bucles i,k,j optimiza caché: B[i,k] se carga una sola vez y se reutiliza para todos los j
+    for (int i_block = start_block_row; i_block < end_block_row; i_block++) {
+        int block_i = i_block * bs;
+        int in = block_i * n;
         for (int k = 0; k < n; k += bs) {
-            int in = block_i * n;
             int kn = k * n;
-            
-            blkmulRowColCol(&b[in + k], &b[kn + block_j*n], &d[block_i + block_j*n], n, bs);
+            for (int j_block = 0; j_block < blocks_per_dim; j_block++) {
+                int block_j = j_block * bs;
+                blkmulRowColCol(&b[in + k], &b[kn + block_j*n], &d[block_i + block_j*n], n, bs);
+            }
         }
     }
     pthread_exit(NULL);
 }
 void * matmulblksRowColRowParallel(void *ptr) {
     // Implementación especializada para A row-major, B col-major, C row-major
-    // C[i*n + j] += A[i*n + k] * D[k*n + j]
     // Copiar argumentos localmente para evitar race condition
     thread_args_t args_local = *((thread_args_t *) ptr);
     
-    int start_block = args_local.start_block;
-    int end_block = args_local.end_block;
-    int n = args_local.N;
+    int start_block_row = (int)args_local.start_block_row;
+    int end_block_row = (int)args_local.end_block_row;
+    int n = (int)args_local.N;
     int bs = BS;
-    int num_blocks_per_dim = n / bs;
+    int blocks_per_dim = (int)args_local.blocks_per_dim;
     
-    for (int block_id = start_block; block_id < end_block; block_id++) {
-        int block_i = (block_id / num_blocks_per_dim) * bs;
-        int block_j = (block_id % num_blocks_per_dim) * bs;
-        
+    // Orden de bucles i,k,j optimiza caché: A[i,k] se carga una sola vez y se reutiliza para todos los j
+    for (int i_block = start_block_row; i_block < end_block_row; i_block++) {
+        int block_i = i_block * bs;
+        int in = block_i * n;
         for (int k = 0; k < n; k += bs) {
-            int in = block_i * n;
             int kn = k * n;
-            
-            blkmulRowColRow(&a[in + k], &d[kn + block_j], &c[in + block_j], n, bs);
+            for (int j_block = 0; j_block < blocks_per_dim; j_block++) {
+                int block_j = j_block * bs;
+                blkmulRowColRow(&a[in + k], &d[kn + block_j], &c[in + block_j], n, bs);
+            }
         }
     }
     pthread_exit(NULL);
