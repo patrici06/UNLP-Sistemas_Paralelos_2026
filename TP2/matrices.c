@@ -161,16 +161,17 @@ void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
         }
     }
 }
+
 void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C row-major
     // C[i*n + j] += A[i*n + k] * B[k*n + j]
     for (int i = 0; i < n; i += bs) {
         int in = i*n;
-        for (int k = 0; k < n; k += bs) {
-            int kn = k*n;
-            for (int j = 0; j < n; j += bs) {
-                                //
-                blkmulRowColRow(&a[in + j], &b[kn + j], &c[in + k], n, bs);
+        for (int j = 0; j < n; j += bs) {
+            int jn = j*n;
+            for (int k = 0; k < n; k += bs) {
+               //blkmulRowColRow(&a[in + j], &b[kn + j], &c[in + k], n, bs);
+                blkmulRowColRow(&a[in + k], &b[jn + k], &c[in + j], n, bs);
             }
         }
     }
@@ -180,14 +181,14 @@ void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C column-major
     for (int i = 0; i < bs; i++) {
         int in = i*n;
-        for (int k = 0; k < bs; k++) {        
-            int kn = k*n;
+        for (int j = 0; j < bs; j++) {        
+            int jn = j*n;
             double sum = 0.0;
-                for (int j = 0; j < bs; j++) {
-            
-                    sum += ablk[in + j] * bblk[kn + j];
+                for (int k = 0; k < bs; k++) {
+                    //sum += ablk[in + j] * bblk[kn + j];
+                    sum += ablk[in + k] * bblk[jn + k];
                 }
-                cblk[i + kn] += sum;
+                cblk[i + jn] += sum;
             }
     }
 }
@@ -195,13 +196,14 @@ void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
     // Implementación especializada para A row-major, B column-major, C row-major
     for (int i = 0; i < bs; i++) {
         int in = i*n;
-        for (int k = 0; k < bs; k++) {
+        for (int j = 0; j < bs; j++) {
             double sum = 0.0;
-            int kn = k*n;  
-            for (int j = 0; j < bs; j++) {
-                sum += ablk[in + j] * bblk[kn + j];
+            int jn = j*n;  
+            for (int k = 0; k < bs; k++) {
+                //sum += ablk[in + j] * bblk[kn + j];
+                sum += ablk[in + k] * bblk[jn + k];
             }
-            cblk[in + k] += sum;
+            cblk[in + j] += sum;
         }
     }
 }
