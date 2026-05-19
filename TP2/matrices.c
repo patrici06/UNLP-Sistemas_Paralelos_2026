@@ -5,7 +5,7 @@
 #include<string.h>
 #include<stdbool.h>
 
-#define BS 64
+#define BS 4
 
 
 double dwalltime();
@@ -35,7 +35,7 @@ int main(int argc, char*argv[]) {
         exit(1);
     }
     bool print = false;
-    print = BS == 8;
+    print = BS == 4;
     a = (double*) malloc(sizeof(double)*n*n);
     b = (double*) malloc(sizeof(double)*n*n);
     d = (double*) malloc(sizeof(double)*n*n);
@@ -60,6 +60,7 @@ int main(int argc, char*argv[]) {
         printf("\n========== TESTING: Matrices Iniciales ==========\n");
         print_matrix(a, n, "Matriz A (row-major)", 0, print);
         print_matrix(b, n, "Matriz B (row-major)", 0, print);
+        print_matrix(b, n, "Matriz BT (column-major)", 2, print);
         printf("================================================\n\n");
     }
 
@@ -152,23 +153,24 @@ void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
     // C[i + j*n] += A[i*k] * B[k + j*n]
     for (int i = 0; i < n; i += bs) {
         int in = i*n;
-        for (int k = 0; k < n; k += bs) {
-            int kn = k*n;
-            for (int j = 0; j < n; j += bs) {
-                blkmulRowColCol(&a[in + k], &b[kn + j*n], &c[i + j*n], n, bs);
+        for (int j = 0; j < n; j += bs) {
+            int jn = j*n;
+            for (int k = 0; k < n; k += bs) {
+                blkmulRowColCol(&a[in + k], &b[k + jn], &c[i + jn], n, bs);
             }
         }
     }
 }
 void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
-    // Implementación especializada para A row-major, B row-major, C row-major
+    // Implementación especializada para A row-major, B column-major, C row-major
     // C[i*n + j] += A[i*n + k] * B[k*n + j]
     for (int i = 0; i < n; i += bs) {
         int in = i*n;
         for (int k = 0; k < n; k += bs) {
             int kn = k*n;
             for (int j = 0; j < n; j += bs) {
-                blkmulRowColRow(&a[in + k], &b[kn + j], &c[in + j], n, bs);
+                                //
+                blkmulRowColRow(&a[in + j], &b[kn + j], &c[in + k], n, bs);
             }
         }
     }
@@ -183,7 +185,7 @@ void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
             double sum = 0.0;
                 for (int j = 0; j < bs; j++) {
             
-                    sum += ablk[in + k] * bblk[kn + j];
+                    sum += ablk[in + j] * bblk[kn + j];
                 }
                 cblk[i + kn] += sum;
             }
@@ -197,7 +199,7 @@ void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
             double sum = 0.0;
             int kn = k*n;  
             for (int j = 0; j < bs; j++) {
-                sum += ablk[in + k] * bblk[kn + j];
+                sum += ablk[in + j] * bblk[kn + j];
             }
             cblk[in + k] += sum;
         }

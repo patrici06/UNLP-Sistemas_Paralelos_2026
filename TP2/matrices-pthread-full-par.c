@@ -24,6 +24,7 @@ typedef struct {
     int thread_id;
     int start_idx;
     int end_idx;
+    int _pad1;  // Padding para alinear a 64 bytes y evitar false sharing
     double MaxA, MinA, PromA;
     double MaxB, MinB, PromB;
 } stats_args_t;
