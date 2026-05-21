@@ -5,7 +5,7 @@
 #include<string.h>
 #include<stdbool.h>
 
-#define BS 4
+#define BS 64
 
 
 double dwalltime();
