@@ -124,6 +124,7 @@ int main(int argc, char*argv[]) {
     // =========================
     // VALIDACIÓN
     // =========================
+    
     int nan_count = 0, inf_count = 0;
 
     for (i = 0; i < n*n; i++) {

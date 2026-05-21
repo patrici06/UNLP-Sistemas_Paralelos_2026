@@ -6,52 +6,44 @@
 #include<stdbool.h>
 #include<pthread.h>
 
-#define BS 64
+// SIN BLOCK TILING - versión naive para comparación
 
 // ========================================
 // VARIABLES GLOBALES
 // ========================================
-// Métricas globales - compartidas con mutex
 pthread_mutex_t mutex_metrics = PTHREAD_MUTEX_INITIALIZER;
 double g_maxA = -999999999, g_minA = 999999999, g_sumA = 0.0;
 double g_maxB = -999999999, g_minB = 999999999, g_sumB = 0.0;
-double factor_final = 0.0;  // Constante k = (maxA*maxB - minA*minB) / (promA * promB)
+double factor_final = 0.0;
 
-// Barrera de sincronización
 pthread_barrier_t barrier_sync;
-
-// Variable estática para almacenar referencia secuencial (T=1)
 static double ref_time_sequential = -1.0;
 
 // ========================================
 // ESTRUCTURAS
 // ========================================
 typedef struct {
-    int id;      // ID del hilo
-    int N;       // Tamaño de matriz
-    int T;       // Total de hilos
-    int chunk;   // Elementos por hilo (N/T)
-    double *A;   // Matriz A global
-    double *B;   // Matriz B global
-    double *C;   // Matriz resultado de A x D
-    double *D;  // Matriz temporal para B*B^T
-    double *R;   // Matriz resultado
+    int id;
+    int N;
+    int T;
+    int chunk;
+    double *A;
+    double *B;
+    double *D;
+    double *R;
 } thread_args_t;
 
 // ========================================
 // DECLARACIONES
 // ========================================
 double dwalltime();
-void print_matrix(double *mat, int n, const char *name, int order, bool print);
 void *thread_worker(void *ptr);
-void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs);
-void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs);
 
 // ========================================
 // MAIN
 // ========================================
 int main(int argc, char*argv[]) {
-    int i, j, k, n, t;
+    int i, n, t;
     double timetick, workTime;
 
     if ((argc != 3) || ((n = atoi(argv[1])) <= 0) || ((t = atoi(argv[2])) <= 0)) {
@@ -59,9 +51,6 @@ int main(int argc, char*argv[]) {
         printf("N: tamaño de matriz, T: cantidad de hilos\n");
         exit(1);
     }
-    
-    bool print = false;
-    print = BS == 4;
 
     // Asignar memoria para matrices
     double *A = (double*) malloc(sizeof(double) * n * n);
@@ -85,19 +74,10 @@ int main(int argc, char*argv[]) {
         R[i] = 0.0;
     }
 
-    // TESTING: Print initial matrices
-    if (print) {
-        printf("\n========== TESTING: Matrices Iniciales ==========\n");
-        print_matrix(A, n, "Matriz A (row-major)", 0, print);
-        print_matrix(B, n, "Matriz B (row-major)", 0, print);
-        printf("================================================\n\n");
-    }
-
     pthread_attr_t attr;
     pthread_t threads[t];
     thread_args_t thread_args[t];
     
-    // Inicializar barrera para sincronizar t hilos
     pthread_barrier_init(&barrier_sync, NULL, t);
     
     timetick = dwalltime();
@@ -126,17 +106,6 @@ int main(int argc, char*argv[]) {
     
     workTime = dwalltime() - timetick;
 
-    // TESTING: Print intermediate results
-    if (print) {
-        printf("\n========== TESTING: D = B x B^T ==========\n");
-        print_matrix(D, n, "Matriz D (column-major)", 2, print);
-        printf("=========================================\n\n");
-        printf("\n========== TESTING: R = A x D x k ==========\n");
-        printf("Constante k = %lf\n", factor_final);
-        print_matrix(R, n, "Matriz R (row-major)", 0, print);
-        printf("============================================\n\n");
-    }
-
     // =========================
     // VALIDACIÓN
     // =========================
@@ -148,18 +117,14 @@ int main(int argc, char*argv[]) {
         if (isinf(R[i])) inf_count++;
     }
 
-    // Calcular GFLOPS
     double gflops = ((double)2*n*n*n)/(workTime*1e9);
     
-    // Calcular speedup y eficiencia
     double speedup = 1.0;
     double efficiency = 100.0;
     
     if (t == 1) {
-        // Guardar tiempo de referencia para T=1
         ref_time_sequential = workTime;
     } else if (ref_time_sequential > 0) {
-        // Calcular speedup basado en referencia secuencial
         speedup = ref_time_sequential / workTime;
         efficiency = (speedup / (double)t) * 100.0;
     }
@@ -183,13 +148,12 @@ int main(int argc, char*argv[]) {
 }
 
 // ========================================
-// FUNCTION: thread_worker
-// Patrón: Local -> Mutex -> Barrier -> Hilo 0 Calcula -> Barrier
+// FUNCTION: thread_worker (SIN BLOCK TILING)
+// Multiplicación naive elemento por elemento
 // ========================================
 void *thread_worker(void *ptr) {
     thread_args_t *p = (thread_args_t*)ptr;
     
-    // Asignar explícitamente los campos de la estructura con casting explícito
     int id = (int)p->id;
     int N = (int)p->N;
     int T = (int)p->T;
@@ -199,34 +163,25 @@ void *thread_worker(void *ptr) {
     double *D = (double*)p->D;
     double *R = (double*)p->R;
     
-    // Calcular rango de filas para este hilo
     int start = id * chunk;
     int end = (id == T - 1) ? N : (id + 1) * chunk;
 
-
-
-
     // ========================================
     // ETAPA 0: Cálculo LOCAL de métricas
-    // SIN MUTEX - cada hilo usa variables locales
     // ========================================
     double l_maxA = -999999999, l_minA = 999999999, l_sumA = 0.0;
     double l_maxB = -999999999, l_minB = 999999999, l_sumB = 0.0;
     
-    // Iterar sobre filas asignadas a este hilo
     for (int i = start * N; i < end * N; i++) {
-        // Métrica de A
         if (A[i] > l_maxA) l_maxA = A[i];
         if (A[i] < l_minA) l_minA = A[i];
         l_sumA += A[i];
         
-        // Métrica de B
         if (B[i] > l_maxB) l_maxB = B[i];
         if (B[i] < l_minB) l_minB = B[i];
         l_sumB += B[i];
     }
     
-    // Actualizar globales CON MUTEX
     pthread_mutex_lock(&mutex_metrics);
     if (l_maxA > g_maxA) g_maxA = l_maxA;
     if (l_minA < g_minA) g_minA = l_minA;
@@ -236,7 +191,6 @@ void *thread_worker(void *ptr) {
     g_sumB += l_sumB;
     pthread_mutex_unlock(&mutex_metrics);
     
-    // BARRERA: Todos esperan
     pthread_barrier_wait(&barrier_sync);
     
     // Solo hilo 0 calcula la CONSTANTE
@@ -249,37 +203,36 @@ void *thread_worker(void *ptr) {
     pthread_barrier_wait(&barrier_sync);
     
     // ========================================
-    // ETAPA 1: Multiplicación B x B^T -> D (row-col-col)
-    // Loop order: i, j, k (como en matrices.c)
-    // blkmulRowColCol(&b[i*n + k], &b[k + j*n], &d[i + j*n], n, bs)
+    // ETAPA 1: Multiplicación NAIVE B x B^T -> D
+    // Sin block tiling - elemento por elemento
     // ========================================
-    int TB = BS;
-    for (int i = start; i < end; i += TB) {
+    for (int i = start; i < end; i++) {
         int in = i * N;
-        for (int j = 0; j < N; j += TB) {
+        for (int j = 0; j < N; j++) {
             int jn = j * N;
-            for (int k = 0; k < N; k += TB) {
-                blkmulRowColCol(&B[in + k], &B[k + jn], 
-                                &D[i + jn], N, TB);
+            double sum = 0.0;
+            for (int k = 0; k < N; k++) {
+                sum += B[in + k] * B[k + jn];
             }
+            D[i + jn] += sum;
         }
     }
     
     pthread_barrier_wait(&barrier_sync);
     
     // ========================================
-    // ETAPA 2: Multiplicación A x D -> R (row-col-row)
-    // Loop order: i, j, k (como en matrices.c)
-    // blkmulRowColRow(&a[i*n + k], &b[j*n + k], &c[i*n + j], n, bs)
+    // ETAPA 2: Multiplicación NAIVE A x D -> R
+    // Sin block tiling - elemento por elemento
     // ========================================
-    for (int i = start; i < end; i += TB) {
+    for (int i = start; i < end; i++) {
         int in = i * N;
-        for (int j = 0; j < N; j += TB) {
+        for (int j = 0; j < N; j++) {
             int jn = j * N;
-            for (int k = 0; k < N; k += TB) {
-                blkmulRowColRow(&A[in + k], &D[jn + k], 
-                                &R[in + j], N, TB);
+            double sum = 0.0;
+            for (int k = 0; k < N; k++) {
+                sum += A[in + k] * D[jn + k];
             }
+            R[in + j] += sum;
         }
     }
     
@@ -287,49 +240,12 @@ void *thread_worker(void *ptr) {
     
     // ========================================
     // ETAPA 3: Aplicar factor_final
-    // R = R * factor_final
     // ========================================
     for (int i = start * N; i < end * N; i++) {
         R[i] *= factor_final;
     }
     
     pthread_exit(NULL);
-}
-
-// ========================================
-// FUNCTION: blkmulRowColCol
-// Multiplicación especializada: A row-major, B column-major, C column-major
-// ========================================
-void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
-    for (int i = 0; i < bs; i++) {
-        int in = i * n;
-        for (int j = 0; j < bs; j++) {
-            int jn = j * n;
-            double sum = 0.0;
-            for (int k = 0; k < bs; k++) {
-                sum += ablk[in + k] * bblk[jn + k];
-            }
-            cblk[i + jn] += sum;
-        }
-    }
-}
-
-// ========================================
-// FUNCTION: blkmulRowColRow
-// Multiplicación especializada: A row-major, B column-major, C row-major
-// ========================================
-void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
-    for (int i = 0; i < bs; i++) {
-        int in = i * n;
-        for (int j = 0; j < bs; j++) {
-            double sum = 0.0;
-            int jn = j * n;
-            for (int k = 0; k < bs; k++) {
-                sum += ablk[in + k] * bblk[jn + k];
-            }
-            cblk[in + j] += sum;
-        }
-    }
 }
 
 // =========================
@@ -343,29 +259,4 @@ double dwalltime()
     gettimeofday(&tv, NULL);
     sec = tv.tv_sec + tv.tv_usec/1000000.0;
     return sec;
-}
-
-// =========================
-// PRINT MATRIX FUNCTIONS
-// =========================
-void print_matrix(double *mat, int n, const char *name, int order, bool print)
-{
-    if (print) {
-        printf("\n%s (n=%d, order=%s):\n", name, n, order == 0 ? "row-major" : order == 1 ? "row-major" : "column-major");
-        
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                double val;
-                if (order == 0 || order == 1) {
-                    // row-major
-                    val = mat[i*n + j];
-                } else {
-                    // column-major (order == 2)
-                    val = mat[i + j*n];
-                }
-                printf("%8.2f ", val);
-            }
-            printf("\n");
-        }
-    }
 }
