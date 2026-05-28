@@ -32,6 +32,17 @@ double dwalltime() {
 // ========================================
 // MAIN
 // ========================================
+// FORMATO DE SALIDA:
+// RESULT;N;T;workTime;GFLOPS;speedup;efficiency;overhead;overhead%
+//   - N: tamaño de matriz
+//   - T: cantidad de threads
+//   - workTime: tiempo de ejecución (segundos)
+//   - GFLOPS: operaciones en punto flotante por segundo (2*N³ / workTime)
+//   - speedup: aceleración respecto a T=1 (ref_time_sequential / workTime)
+//   - efficiency: porcentaje de eficiencia = (speedup / T) * 100
+//   - overhead: tiempo perdido en sincronización = workTime - (ref_time / T)
+//   - overhead%: porcentaje de overhead = (overhead / workTime) * 100
+// ========================================
 int main(int argc, char*argv[]) {
     double *a, *b, *d, *r;
     int i, n, t;
@@ -44,14 +55,21 @@ int main(int argc, char*argv[]) {
 
     print_matrices = 0;
 
-    if ((argc < 2) || ((n = atoi(argv[1])) <= 0)) {
-        printf("\nError: N debe ser positivo\n");
-        printf("Uso: %s N [T] [print_matrices]\n", argv[0]);
+    if ((argc < 3) || ((n = atoi(argv[1])) <= 0) || ((t = atoi(argv[2])) <= 0)) {
+        printf("\nError: N y T deben ser positivos\n");
+        printf("Uso: %s N T [print_matrices]\n", argv[0]);
         exit(1);
     }
     
-    // T es número de threads (opcional tambien los puede tomar por defecto del entorno OpenMP)
-    t = (argc >= 3) ? atoi(argv[2]) : omp_get_max_threads();
+    // Datos obtenidos de una ejecucion con t=1 en cluster
+    // Hardcodear ref_time_sequential según N (promedio de 3 ejecuciones para openmp)
+    if (n == 512) ref_time_sequential = 0.486125;
+    else if (n == 1024) ref_time_sequential = 3.895695;
+    else if (n == 2048) ref_time_sequential = 32.031549;
+    else if (n == 4096) ref_time_sequential = 254.817039;
+    else ref_time_sequential = -1.0;  // Para otros tamaños, sin referencia
+    
+    // T es REQUERIDO (no opcional)
     omp_set_num_threads(t);
 
     if (argc >= 4) {
@@ -153,24 +171,30 @@ int main(int argc, char*argv[]) {
     // Calcular GFLOPS
     double gflops = ((double)2*n*n*n)/(workTime*1e9);
     
-    // Calcular speedup y eficiencia
+    // Calcular speedup, eficiencia y overhead
     speedup = 1.0;
     efficiency = 100.0;
+    double overhead = 0.0;
+    double overhead_percent = 0.0;
     
     if (t == 1) {
         ref_time_sequential = workTime;
     } else if (ref_time_sequential > 0) {
         speedup = ref_time_sequential / workTime;
         efficiency = (speedup / (double)t) * 100.0;
+        // Overhead = tiempo paralelo - (tiempo secuencial / T)
+        overhead = workTime - (ref_time_sequential / (double)t);
+        overhead_percent = (overhead / workTime) * 100.0;
     }
 
-    printf("RESULT;%d;%d;%lf;%lf;%lf;%lf\n", n, t, workTime, gflops, speedup, efficiency);
-    printf("CONSTANTE_K;%lf\n", constante);
+    // Formato: RESULT;N;T;workTime;GFLOPS;speedup;efficiency;overhead;overhead%
+    printf("RESULT;%d;%d;%lf;%lf;%lf;%lf;%lf;%lf\n", n, t, workTime, gflops, speedup, efficiency, overhead, overhead_percent);
+    // printf("CONSTANTE_K;%lf\n", constante);
 
-    if (nan_count == 0 && inf_count == 0)
-        printf("VALIDATION;OK\n");
-    else
-        printf("VALIDATION;ERROR;NaN=%d;Inf=%d\n", nan_count, inf_count);
+    // if (nan_count == 0 && inf_count == 0)
+    //     printf("VALIDATION;OK\n");
+    // else
+    //     printf("VALIDATION;ERROR;NaN=%d;Inf=%d\n", nan_count, inf_count);
 
     free(a);
     free(b);

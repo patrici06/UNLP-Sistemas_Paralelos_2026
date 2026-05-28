@@ -1,0 +1,169 @@
+﻿Sistemas Paralelos 
+Trabajo Práctico 2:
+Algoritmos Paralelos Pthreads y OpenMP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Alumnos:
+Patricio Oscar Rivero 23039/3
+Enunciado
+Dada la siguiente expresión:
+  
+
+− Donde A, B y R son matrices cuadradas de NxN con elementos de tipo double.
+− MaxA, MinA y PromA son los valores máximo, mínimo y promedio de la matriz A, respectivamente.
+− MaxB, MinB y PromB son los valores máximo, mínimo y promedio de la matriz B, respectivamente.
+− BT es la matriz transpuesta de B.
+Desarrolle 3 algoritmos que computen la expresión dada:
+1. Algoritmo secuencial optimizado
+2. Algoritmo paralelo empleando Pthreads
+3. Algoritmo paralelo empleando OpenMP
+Mida el tiempo de ejecución de los algoritmos en el cluster remoto. Las pruebas deben considerar la variación
+del tamaño de problema (N={512, 1024, 2048, 4096}) y, en el caso de los algoritmos paralelos, también la
+cantidad de hilos (T={2,4,8})
+
+
+Resolucion del trabajo: 
+Punto 1:
+En este caso se persiste la solucion presente en la entrega 1.  Por lo que la explicacion de la misma es igual de valida para esta entrega. Consideraciones, la decisiones tomadas en el recorrido de las matrices, uso de bloques para mejorar la taza de cache hits. etc. 
+El codigo se encuentra en el archivo matrices.c
+En local: 
+  
+
+Cluster:
+  
+
+Las conclusiones, son las mismas que la entrega 1. 
+
+
+Punto 2: 
+Dada la solución de del matrices.c se realizo la paralelización con pthread: 
+Se eligió dividir el algoritmo en 7 fases independientes separadas por barreras explicitas. Se decidió esta organización para mantener responsabilidades claras y sincronización controlada entre etapas(mas sencillo para mi).
+Sobre la Transposición de B => BT, se tomo la decisión de evitar una seccion serial y mejorar la localidad de acceso en las multiplicaciones siguientes. 
+Para el calculo de las métricas se decidió que cada hilo calcule métricas locales sobre su rango de filas. Luego se agregan mediante una seccion critica corta protegida con mutex(exclusión mutua). La idea fue usar unicamente mutex aca para evitar un lock global grande y limite la seccion critica lo mas posible. 
+El Uso de barreras explicitas, se eligio usar pthread_barrier_wait() entre cada fase del algoritmo. La decisión es para mantener sincronización clara y separar las etapas. 
+Se opto por Una Distribución estática de filas, ,se eligio una division estatica por bloques (aprovechar lo desarrollado en matrices.c). Esta es la decision mas importante y se tomo porque todas las filas tienen  una carga de trabajo equitativa. 
+ 
+La decision de dividir en 7 etapas es principalmente por facilidad del codigo, la mejora sustancial que podia suponer hacerlo todo en una unica etapa no merecia la pena.
+Local: 
+  
+
+
+Cluster: 
+  
+
+Conclusiones en base a los datos: 
+En resultados pequeños se ve mejora en aprovechar el paralelismo en especial cuantos mas hilos tenemos  (4,8). En casos de matrices chicas se ve que el overhead de sincronizacion tiene mayor impacto relativo, por lo que se aprecia que la diferencia entre cantidades de hilso en estos casos no siempre es proporcional. 
+Se observa que en muchos casos no hay grandes diferencias entre 8 y 4 hilos, esto ocurre principalmente por la contencion de memoria y saturacion del ancho de banda, esto porque la multiplicación pasa a estar limitada por acceso a cache y memoria compartida. 
+En el cluster se ven variabilidades en los resultados, esto es debido a las politicas de planificacion del scheduler del cluster y competencia por recursos compartidos entre procesos. 
+Se destaca que el rendimiento mejora mas establemente en tamaños grandes de matrices. esto sucede porque el costo fijo de sincronización mediante barreras y mutex se amortiza contra el volumen de trabajo. 
+Punto 3: 
+El codigo se encuentra en el archivo: matrices-open-pm.c 
+Al igual que en todos los ejercicios anteriores elegimos mantener la nomenclatura de las matrices. Se eligió usar una unica region paralela principal (#pragma omp parallel), para evitar multiples regiones independientes. La decision se tomo par reutilizar el mismo conjunto de hilos durante toda la ejecucion y evitar overhead repetido de fork-join. dentro de esta region se hicieron todas las operaciones paralelas. 
+Aunque pueda ser innecesario se mantiene la coherencia de declarar las matrices, de ahi que se recorran como se recorren. 
+Seguimos usando block tiling de constante BS = 64 para mantener los bloques y mejorar la localidad de cache en la manipulacion de matrices. Cada hilo trabaja sobre bloques independientes, asi evitamos interferencia directa entre las regiones de memoria compartidas. 
+En la transposicion de B => BT se decidio usar collapse(2) sobre los bucles de bloques (bi, bj). Esta decision es para aumentar la cantidad de tareas paralelas disponibles y distribuir bloques completos entre hilos. Cada hilo entonces accede unicamente a su region de trabajo por sus indices protegidos (dentro del bloque, como indica la catedra). 
+La operacion: mat_t[j*n + i] = mat[in+ j] ; se mantiene independiente entre iteraciones y no requiere sincronización explicita. 
+En el calculo de estadísticas globales opte por utilizar cláusulas reduction para maximos, minimos y  acumuladores. Esto evita race conditions y reemplazar mecanismos manuales como critical o mutexes. Cada hilo antiene copias privadas temporales de las variables de reduccion y OpenMP realiza despues la combinada de resultados. 
+Para el calculo de la constante global se uso #pragma omp single
+constante = ((MaxA * MaxB) - (MinA * MinB)) / (PromA * PromB);
+ Garantizamos asi que el calculo se ejecute una única vez dentro de la region paralela y que todos los hilos continuen usando un valor compartido. 
+
+
+Continuamos con la multiplicacion matricial, use implementacion bloqueada (matmulblks) junto con collapse(3) sobre los bucles (i,k,j). Esto porque aumente el paralelismo disponible y distribuye una mayor cantidad de bloques entre hilos. Cada tarea opera sobre submatrices independientes mediante offsets calculados: 
+&a[in + k]
+&b[kn + j]
+&c[in + j]
+Esto permite que cada hilo procese regiones de memoria sin compartir indices de escritura simultaneamente. 
+
+
+Opte por schedule (static) en todos los bucles paralelos. esto porque la carga de trabajo por bloque es homogenea y predecible. OpenMP distribuye las iteraciones de forma estatica entre hilos, evityando redistribucion dinamica(lo que es mas complejo de escribir e innecesario teniendo en cuenta lo ya mencionado) y mantenemos optima la cache respecto a los hilos. 
+En el escalado final: 
+r[i] = constante * c[i];
+Lo paralelismos el recorrido utilizando omp for, como cada elemento de r es independiente y no existen dependencias entre iteraciones. 
+Porque no usar schedule(dynamic) porque el algoritmo no tiene cargas irregulares entre bloques. Tambien rechazamos el uso de critical para acumulaciones globales debido a la contención que introduce sobre regiones compartidas.
+Local: 
+  
+
+Cluster: 
+  
+
+En lineas generales se observa que es mas estable que Pthreads en la mayoría de los tamannos de entrada. Esto porque OpenMP distribuye automaticamente el trabajo mediante shcedule (static) y reutiliza la region paralela sin crear hilos continuamente.
+ En lineas generales se observa que OpenMP mantiene un comportamiento mas estable a medida que aumenta N. Esto porque collapse(2) y collapse(3) permiten repartir una mayor cantidad de bloques entre los hilos y mejorar la distribucion del trabajo.
+Tambien se observa que en algunos casos usar 8 hilos no mejora demasiado respecto a 4. Esto ocurre porque el programa comienza a depender mas del acceso a memoria y cache que de la cantidad de hilos.
+En el cluster aparecen pequenas diferencias entre ejecuciones similares. Esto es normal en entornos compartidos, donde otros procesos y la distribucion de recursos pueden afectar los tiempos.
+Los mejores resultados aparecen en matrices grandes, donde el trabajo total es suficiente para amortizar el costo de sincronizacion y coordinacion de OpenMP.
+
+
+Especificaciones netbook patricio rivero:

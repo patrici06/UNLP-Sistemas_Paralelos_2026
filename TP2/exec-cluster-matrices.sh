@@ -1,85 +1,66 @@
 #!/bin/bash
 
 # ============================================================
-# Script para CLUSTER - matrices.c (SECUENCIAL)
+# Script para CLUSTER - matrices.c (Referencia Secuencial)
 # ============================================================
 # Este script:
-#   1. Compila matrices.c (-O1, -O2, -O3)
-#   2. Envía jobs al cluster mediante sbatch
-#   3. Captura salidas en estructura ordenada
+#   1. Envía trabajos para N={512, 1024, 2048, 4096}
+#   2. Cada nodo compila matrices.c con -O2
+#   3. T=1 (solo secuencial)
 #
 # Parámetros:
 #   - Tamaños: N = {512, 1024, 2048, 4096}
-#   - Optimización: O = {1, 2, 3}
+#   - Thread: T = 1 (único, secuencial)
+#   - Compilación: -O2 (EN EL NODO)
 #
-# Estructura de salida (EN MOTO):
-#   salidas/
-#   ├─ matrices/
-#   │  ├─ N512/O1/{outputs,reports}
-#   │  ├─ N512/O2/{outputs,reports}
-#   │  ├─ N512/O3/{outputs,reports}
-#   │  ├─ N1024/...
-#   │  ├─ N2048/...
-#   │  └─ N4096/...
+# Estructura de salida:
+#   salidas/matrices/N512/outputs/
+#   salidas/matrices/N1024/outputs/
+#   salidas/matrices/N2048/outputs/
+#   salidas/matrices/N4096/outputs/
+#
+# USO: ./exec-cluster-matrices.sh
 # ============================================================
 
 set -e
 
 matrix_sizes=(512 1024 2048 4096)
-optimization_levels=(1 2 3)
 
 SALIDAS_DIR="./salidas"
-TIPO_EXEC="matrices"
-mkdir -p "$SALIDAS_DIR/$TIPO_EXEC"
 
 echo "======================================"
-echo "ENVÍO DE TRABAJOS AL CLUSTER - SECUENCIAL"
+echo "ENVÍO DE TRABAJOS AL CLUSTER"
+echo "(Compilación en cada nodo)"
 echo "======================================"
-echo ""
-
-echo "Compilando matrices.c..."
-for o in "${optimization_levels[@]}"; do
-	echo -n "  -O$o... "
-	if gcc -O${o} ./matrices.c -o ./matrices-O${o} -lm 2>/dev/null; then
-		echo "✓"
-	else
-		echo "✗ ERROR"
-		exit 1
-	fi
-done
 echo ""
 
 for n in "${matrix_sizes[@]}"; do
-	echo "=================================================="
-	echo "Enviando trabajos: N=$n (SECUENCIAL)"
-	echo "=================================================="
-
-	for o in "${optimization_levels[@]}"; do
-		EXEC_DIR="$SALIDAS_DIR/$TIPO_EXEC/N${n}/O${o}"
-		OUTPUT_DIR="$EXEC_DIR/outputs"
-		REPORT_DIR="$EXEC_DIR/reports"
-		mkdir -p "$OUTPUT_DIR"
-		mkdir -p "$REPORT_DIR"
-
-		echo -n "  O$o... "
-
-		# Enviar job a cluster
-		job_id=$(sbatch \
-			-o "$OUTPUT_DIR/matrices_%j.txt" \
-			--job-name="seq-N${n}-O${o}" \
-			--time=00:10:00 \
-			--partition=Blade \
-			-N 1 --exclusive \
-			./job-matrices.sh $n $o 2>&1 | awk '{print $NF}')
-
-		echo "Job ID: $job_id"
-
-	done
-	echo ""
+    EXEC_DIR="$SALIDAS_DIR/matrices/N${n}"
+    OUTPUT_DIR="$EXEC_DIR/outputs"
+    mkdir -p "$OUTPUT_DIR"
+    
+    echo -n "  Enviando N=$n (matrices.c)... "
+    
+    # Enviar job a cluster
+    job_id=$(sbatch \
+        -o "$OUTPUT_DIR/exec_%j.txt" \
+        --job-name="matrices-N${n}" \
+        --time=00:15:00 \
+        --partition=Blade \
+        -N 1 --exclusive \
+        ./job-matrices.sh $n 2>&1 | awk '{print $NF}')
+    
+    echo "Job ID: $job_id"
 done
 
+echo ""
 echo "======================================"
 echo "Todos los trabajos han sido enviados"
+echo "======================================"
 echo "Monitorea con: squeue -u \$USER"
-echo "Salidas en: $SALIDAS_DIR/$TIPO_EXEC/N{512,1024,2048,4096}/O{1,2,3}/outputs/"
+echo "Ver salidas en:"
+echo "  salidas/matrices/N{512,1024,2048,4096}/outputs/exec_*.txt"
+echo ""
+echo "NOTA: matrices.c es la REFERENCIA SECUENCIAL"
+echo "      Usad estos tiempos como baseline"
 echo "======================================"

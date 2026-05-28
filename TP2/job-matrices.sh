@@ -2,31 +2,47 @@
 #SBATCH -N 1
 #SBATCH --exclusive
 #SBATCH --partition=Blade
-#SBATCH --time=00:10:00
+#SBATCH --time=00:15:00
 
 # ============================================================
-# Job Script para CLUSTER - matrices.c (SECUENCIAL)
+# Job Script para CLUSTER - matrices.c (REFERENCIA SECUENCIAL)
 # ============================================================
 # Parámetros:
 #   $1: N (tamaño de matriz)
-#   $2: O (nivel de optimización)
 #
 # Ejecutado por: exec-cluster-matrices.sh
+# Compilación: -O2 (única)
 # ============================================================
 
 N=$1
-O=$2
+
+if [ -z "$N" ]; then
+    echo "Uso: $0 N"
+    echo "  N: tamaño de matriz"
+    exit 1
+fi
 
 echo "=========================================="
-echo "Ejecutando matrices (SECUENCIAL)"
+echo "Compilando matrices.c..."
+echo "=========================================="
+TMP_BIN="./matrices-run-$$"
+gcc -O2 -o "$TMP_BIN" ./matrices.c -lm || { echo "ERROR: Compilacion fallida"; exit 1; }
+echo "✓ Compilación exitosa"
+echo ""
+echo "==========================================="
+echo "Ejecutando matrices.c (REFERENCIA)"
+echo "==========================================="
 echo "N = $N"
-echo "Optimization = -O$O"
+echo "Compilación: -O2"
 echo "Host: $(hostname)"
 echo "Date: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "=========================================="
+echo "Threads disponibles: $(nproc)"
+echo "==========================================="
+echo ""
 
-./matrices-O${O} $N
+"$TMP_BIN" $N
 
+echo ""
 echo "=========================================="
 echo "Ejecución completada"
 echo "=========================================="

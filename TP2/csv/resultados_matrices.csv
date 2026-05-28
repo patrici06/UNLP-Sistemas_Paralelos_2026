@@ -1,0 +1,5 @@
+N,T,Algorithm,workTime,GFLOPS,speedup,efficiency,overhead,overhead%
+512,1,matrices,0.487664,0.550452,N/A,N/A,N/A,N/A
+1024,1,matrices,3.916678,0.548292,N/A,N/A,N/A,N/A
+2048,1,matrices,32.468814,0.529119,N/A,N/A,N/A,N/A
+4096,1,matrices,256.832095,0.535132,N/A,N/A,N/A,N/A
