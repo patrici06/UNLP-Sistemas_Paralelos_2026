@@ -216,8 +216,10 @@ void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
     int i, j, k;
     
     // collapse(3): paraleliza los 3 niveles de anidamiento como un único loop
+    // Esto es un Error, el uso de collapse en este problema genera un empeoramiento de la cache, no debe usarse
+    // Es ideal el uso de un grano grueso para el producto de matrices
     // schedule(static): iteraciones balanceadas (bloques uniformes), sin sincronización
-    #pragma omp parallel for collapse(3) schedule(static)
+    #pragma omp parallel for schedule(static)
     for (i = 0; i < n; i += bs) {
         for (j = 0; j < n; j += bs) {
             for (k = 0; k < n; k += bs) {
@@ -239,7 +241,7 @@ void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
     
     // collapse(3): paraleliza los 3 niveles de anidamiento como un único loop
     // schedule(static): iteraciones balanceadas (bloques uniformes), sin sincronización
-    #pragma omp parallel for collapse(3) schedule(static)
+    #pragma omp parallel for schedule(static)
     for (i = 0; i < n; i += bs) {
         for (j = 0; j < n; j += bs) {
             for (k = 0; k < n; k += bs) {
