@@ -103,3 +103,39 @@ Opcioens para Entrada de diseno: CAD vs HDL vs HLS
 
 HDL -> lenguaje de programacion especializado que se utiliza para definir la estructura de diseno y operacion de circuitos electronicos, especialemente los digitales. 
 algunas opciones son Verilog y VHDL.
+
+Verilog y VHDL son las opciones mas populares aunque fueron desarrollados bajo principios similares, su sintaxis es diferente siendo VHDL mas verboso y propenso a errores. 
+
+Son tediosos y propensos a errores, Complejidad adicional por nocion explicita del tiempo, No son portables, baja productividad y dificultan el mantenimiento. 
+
+En la decada del 2000 varios fabricantes de FPGAs mpezaron a ofrecer herramientas para sintesis de alto nivel, bajo este enfoque los programadores desarrollan codigo usando lenguaje de alto nivel como C, C++ o SystemC -> herramienta responsable de generar el codigo HDL equivalente. 
+
+El uso de HLS permite que desarrolladores trabajen en un alto nivel de abstraccion y produzcan disenos de hardware reusables, sin requerir una amplia experiencia en el tema. Este enfoque ha permitido reducir tiempos en la industria (time-to-market)
+	- Disminuye costo de programacion 
+	- Aumenta productividad 
+	- Brinda portabilidad
+	- Facilita mantenimiento
+No hay tendencias claras respecto al rendimiento y uso de recursos. 
+
+### ASICs
+	Es un circuito integrado de aplicacion especifica, hace referencia a un chip destinado a cumplir el proposito para el cual fue disenado y que no puede ser reprogramado/modificado para realizar otra funcion, estos estan presentes en muchos dispositivos cotidianos. 
+
+
+### Resumen de aceleradores: 
+	Si bien cada dispositivo cuenta con sus caracteristicas propias existen diverosos aspectos que son comunes a todos ellos: 
+	- Complejidad de programacion: 
+	 Tecnicas de programacion y optimizacion especificas, multiples niveles de paralelismo, balance de carga, diversidad dde modelos de lenguajes/modelos de programacion, ausencia de estandar consolidado
+	- Memoria del dispositivo separada
+	  Al estar separada dde la memoria del host, su administracion es clave para obtener alto rendimiento
+	 Recientemente se han desarrollado modelos de memoria unificada
+	- Patron de acceso a memoria
+	 Requieren de patrones de acceso especificos para obtener el mejor rendimiento, que no siempre coinciden con las de las CPU
+
+      Si bien cada dispossitivo cuenta con sus caracteristicas propias, existen diversos aspectos que son comunes a todos ellos: 
+	- Many-cores: Gran cantidad de nucleos pequenos 
+	- Multi-hilado: Aplicado de diferentes maneras, buscan ocultar la latencia de la memoria. 
+	- Vectorizacion (SIMD): Cada uno con su enfoque, comparten el espiritu
+	- Ejecucion de instrucciones en orden: la logica de control esta simplificada. 
+	- Memorias cache mas pequenas: la mayo parte de los recursos se destina a unidades funcionales, cobra mayor importancia explotar localidad de datos. 
+
+
