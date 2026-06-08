@@ -75,7 +75,7 @@ int main(int argc, char* argv[]){
         print_matrices = atoi(argv[2]);
     }
     
-    // Ajustar BS si n < BS_FIXED (para permitir n pequeño)
+    // Ajustar BS si n < BS_FIXED (para permitir n pequeñmamao)
     // El flag print_matrices solo controla si se imprime
     int BS_temp = BS_FIXED;
     if (n < BS_FIXED) {
