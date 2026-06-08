@@ -10,11 +10,7 @@
 
 // Tiempos secuenciales de referencia (para calcular speedup)
 // Estos valores se actualizan manualmente cuando se ejecuta matrices-open-mp.c
-// con OMP_NUM_THREADS=1 para obtener tiempo secuencial puro
 double sequential_times(int n) {
-    // HARDCODED: Valores de tiempo secuencial en segundos (matrices-open-mp.c)
-    // Formato: switch case con tiempos medidos (en segundos)
-    // Para actualizar: ejecutar ./matrices-open-mp N 1
     switch(n) {
         case 4:    return 0;         // N/A - muy rápido
         case 64:   return 0;         // N/A - por definir
@@ -26,11 +22,10 @@ double sequential_times(int n) {
     }
 } 
 
-// ========================================
 // Vamos a definir como deberia de plantearse el problema 
 // Tenemos etapas nuevamente, esta son dentro de si mismas independientes
 // Tenemos que paralelizar en todas las etapas por datos, y nuestro objetivo sera paralelizar las salidas. 
-// ========================================
+
 //Funciones heredadas de TP2, veremos si tienen sentido luego
 double dwalltime();
 void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs);
@@ -38,9 +33,8 @@ void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs);
 void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs);
 void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs);
 void print_matrix(double *mat, int n, const char *name, int max_print);
-// ========================================
+
 // TIMER
-// ========================================
 double dwalltime() {
     double sec;
     struct timeval tv;
@@ -76,7 +70,7 @@ int main(int argc, char* argv[]){
         print_matrices = atoi(argv[2]);
     }
     
-    // Ajustar BS si n < BS_FIXED (para permitir n pequeño)
+    // Ajustar BS (para permitir n pequeño)
     // El flag print_matrices solo controla si se imprime
     int BS_temp = BS_FIXED;
     if (n < BS_FIXED) {
@@ -200,9 +194,7 @@ int main(int argc, char* argv[]){
     MPI_Bcast(&constante, 1, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
     double bcast_end = MPI_Wtime();
 
-    // ========================================
     // Etapa 1: Producto de B por B^T -> D
-    // ========================================
     // Cada proceso tiene solo su franja de B en localB (stripSize filas).
     // Para calcular D = B * B^T, cada proceso necesita la matriz B completa
     // (todas las filas), no solo su franja. Por lo tanto, usamos MPI_Allgather
@@ -303,10 +295,8 @@ int main(int argc, char* argv[]){
 
     tick[9] = MPI_Wtime();
 
-    // ========================================
     // Etapa 3: Multiplicación escalar R = constante × R
-    // ========================================
-    // Trivialmente paralelizada: cada proceso multiplica su franja
+    //paralelizada: cada proceso multiplica su franja
 
     tick[10] = MPI_Wtime();
 
@@ -316,9 +306,7 @@ int main(int argc, char* argv[]){
 
     tick[11] = MPI_Wtime();
 
-    // ========================================
     // Gather R final al coordinador
-    // ========================================
     tick[12] = MPI_Wtime();
 
     double *sendR = (double*)malloc(sizeof(double) * stripSize * n);
@@ -336,8 +324,8 @@ int main(int argc, char* argv[]){
         double totalWorkTime = tick[13] - tick[0];
         double gflops = ((double)2*n*n*n) / (totalWorkTime * 1e9);
         
-        // Calcular overhead de comunicaciones total - TODOS los puntos de comunicación
-        // Etapa 0: 
+        // Calcular overhead de comunicaciones total - 
+	// Etapa 0: 
         //   - tick[0..1]: MPI_Scatter (A,B)
         //   - tick[2..3]: MPI_Reduce (min, max, sum)
         //   - bcast_start..bcast_end: MPI_Bcast (constante)
@@ -367,9 +355,7 @@ int main(int argc, char* argv[]){
 	//RESULT;TamMatriz;TiempoTotal;Gflops;overheadComm%;speedUp  
 	printf("RESULT;%d;%lf;%lf;%.6f%%;%s\n", n, totalWorkTime, gflops, commPercent, speedup_str);
 
-        // ========================================
         // Validación contra referencia secuencial
-        // ========================================
         if (n <= 128) {
             // Computar referencia secuencial para validación
             double *refD = (double*)calloc(n * n, sizeof(double));
