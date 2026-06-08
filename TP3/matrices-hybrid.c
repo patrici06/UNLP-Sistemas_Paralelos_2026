@@ -375,7 +375,9 @@ int main(int argc, char* argv[]){
             snprintf(speedup_str, sizeof(speedup_str), "N/A");
         }
         
-        printf("RESULT;%d;%lf;%lf;%.2f%%;%.6f;%s\n", n, totalWorkTime, gflops, commPercent, constante, speedup_str);
+        //formato de salida: 
+	//RESULT;TamMatriz;TiempoTotal;Gflops;overheadComm%;speedUp  
+	printf("RESULT;%d;%lf;%lf;%.6f%%;%s\n", n, totalWorkTime, gflops, commPercent, speedup_str);
 
         // ========================================
         // Validación contra referencia secuencial

@@ -16,12 +16,12 @@ double sequential_times(int n) {
     // Formato: switch case con tiempos medidos (en segundos)
     // Para actualizar: ejecutar ./matrices-open-mp N 1
     switch(n) {
-        case 4:    return -1.0;         // N/A - muy rápido
-        case 64:   return -1.0;         // N/A - por definir
-        case 128:  return 0.0080;       // Estimado: 2x MPI(np=2)
-        case 256:  return 0.0500;       // Estimado: 2x MPI(np=2)
-        case 512:  return 0.3600;       // Estimado: 2x MPI(np=2)
-        case 1024: return 2.8800;       // Estimado: 2x MPI(np=2)
+        case 4:    return 0;         // N/A - muy rápido
+        case 64:   return 0;         // N/A - por definir
+        case 128:  return 0;       	// deberemos validar primero en secuencial para 
+        case 256:  return 0;       	// poder hacer las mediciones adecuadamente
+        case 512:  return 0;       	// estos valores seran harcodeados
+        case 1024: return 0;       	// 
         default:   return -1.0;         // N/A (no disponible)
     }
 } 
@@ -363,7 +363,9 @@ int main(int argc, char* argv[]){
             snprintf(speedup_str, sizeof(speedup_str), "N/A");
         }
         
-        printf("RESULT;%d;%lf;%lf;%.2f%%;%.6f;%s\n", n, totalWorkTime, gflops, commPercent, constante, speedup_str);
+        //formato de salida: 
+	//RESULT;TamMatriz;TiempoTotal;Gflops;overheadComm%;speedUp  
+	printf("RESULT;%d;%lf;%lf;%.6f%%;%s\n", n, totalWorkTime, gflops, commPercent, speedup_str);
 
         // ========================================
         // Validación contra referencia secuencial
