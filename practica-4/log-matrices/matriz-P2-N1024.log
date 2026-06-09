@@ -1,0 +1,10 @@
+Multiplicacion de matrices resultado correcto
+Multiplicacion de matrices (N=1024)	Tiempo total=2.480003	Tiempo comunicacion=0.142012
+
+=== Metricas calculadas ===
+Procesos: 2
+Dimension N: 1024
+Tiempo Secuencial: 4.781153
+Tiempo Paralelo: 2.480003
+Speedup: 1.927881
+Eficiencia: 0.963940

@@ -11,13 +11,10 @@
 
 double sequential_times(int n) {
     switch(n) {
-        case 4:    return 0;
-        case 64:   return 0;
-        case 128:  return 0;
-        case 256:  return 0;
-        case 512:  return 0;
-        case 1024: return 0;
-        default:   return 0;
+        case 512:  return 2.056480;
+        case 1024: return 16.422054;
+        case 2048: return 131.592522;
+        default:   return -1.0;
     }
 }
 
@@ -53,34 +50,28 @@ int main(int argc, char* argv[]){
 	double commTime, totalTime, tick[14];
     double constante;
 
-    int print_matrices = 0;
-	if ((argc < 2) || ((n = atoi(argv[1])) <= 0) ) {
-	    printf("\nUsar: %s size [print]\n  size: Dimension de las matrices\n  print: (opcional) 1 para imprimir matrices (solo n <= 4)\n", argv[0]);
+    int p, t, print_matrices = 0;
+	if ((argc < 4) || ((n = atoi(argv[1])) <= 0) || ((p = atoi(argv[2])) <= 0) || ((t = atoi(argv[3])) <= 0)) {
+	    printf("\nUsar: %s size procs threads [print]\n  size: Dimension de las matrices\n  procs: Cantidad de procesos MPI\n  threads: Cantidad de threads por proceso (para calculo de eficiencia)\n  print: (opcional) 1 para imprimir matrices (solo n <= 4)\n", argv[0]);
 		exit(1);
 	}
-    if (argc >= 3) {
-        print_matrices = atoi(argv[2]);
+    if (argc >= 5) {
+        print_matrices = atoi(argv[4]);
     }
 
-    int BS_temp = BS_FIXED;
-    if (n < BS_FIXED) {
-        BS_temp = n;
-    }
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-
 
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    int BS = BS_temp;
-
-    if (n % BS != 0) {
+    if (p != numProcs) {
         if (rank == COORDINADOR)
-            printf("Error: n (%d) debe ser multiplo de BS (%d)\n", n, BS);
+            printf("Error: cantidad de procesos indicada (%d) no coincide con MPI_Comm_size (%d)\n", p, numProcs);
         MPI_Finalize();
         return 1;
     }
+
     if (n % numProcs != 0) {
         if (rank == COORDINADOR)
             printf("Error: n (%d) debe ser multiplo de numProcs (%d)\n", n, numProcs);
@@ -88,9 +79,14 @@ int main(int argc, char* argv[]){
         return 1;
     }
     stripSize = n / numProcs;
-    if (stripSize < BS) {
+
+    int BS = BS_FIXED;
+    if (stripSize < BS) BS = stripSize;
+    if (n < BS) BS = n;
+
+    if (n % BS != 0) {
         if (rank == COORDINADOR)
-            printf("Error: n/numProcs (%d) debe ser >= BS (%d)\n", stripSize, BS);
+            printf("Error: n (%d) debe ser multiplo de BS (%d)\n", n, BS);
         MPI_Finalize();
         return 1;
     }
@@ -271,15 +267,19 @@ int main(int argc, char* argv[]){
         double commPercent = (commOverhead / totalWorkTime) * 100.0;
 
         double seq_time = sequential_times(n);
-        char speedup_str[16];
+        int total_workers = numProcs * t;
+        char speedup_str[16], efficiency_str[16];
         if (seq_time > 0) {
             double speedup = seq_time / totalWorkTime;
+            double efficiency = (speedup / total_workers) * 100.0;
             snprintf(speedup_str, sizeof(speedup_str), "%.4f", speedup);
+            snprintf(efficiency_str, sizeof(efficiency_str), "%.2f%%", efficiency);
         } else {
             snprintf(speedup_str, sizeof(speedup_str), "N/A");
+            snprintf(efficiency_str, sizeof(efficiency_str), "N/A");
         }
 
-        printf("RESULT;%d;%lf;%lf;%.6f%%;%s\n", n, totalWorkTime, gflops, commPercent, speedup_str);
+        printf("RESULT;%d;%d;%d;%lf;%lf;%.6f%%;%s;%s\n", n, numProcs, t, totalWorkTime, gflops, commPercent, speedup_str, efficiency_str);
 
         if (n <= 128) {
             double *refD = (double*)calloc(n * n, sizeof(double));
