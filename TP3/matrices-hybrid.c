@@ -17,7 +17,7 @@ double sequential_times(int n) {
         case 512:  return 2.056480;
         case 1024: return 16.422054;
         case 2048: return 131.592522;
-	case 4096: return 1057.792433;
+    	case 4096: return 1057.792433;
         default:   return -1.0;
     }
 } 
@@ -71,10 +71,10 @@ int main(int argc, char* argv[]){
     
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-    
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    //validaciones sobre las entradas
     if (p != numProcs) {
         if (rank == COORDINADOR)
             printf("Error: cantidad de procesos indicada (%d) no coincide con MPI_Comm_size (%d)\n", p, numProcs);
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]){
         MPI_Finalize();
         return 1;
     }
-
+    // Inicialización de matrices globales
     a = (double*) malloc(sizeof(double)*n*n);
     b = (double*) malloc(sizeof(double)*n*n);
     d = (double*) malloc(sizeof(double)*n*n);
@@ -116,7 +116,6 @@ int main(int argc, char* argv[]){
         r[i*n + j] = 0.0;
        }
     }
-
     // Reservamos espacio para las porciones locales que recibiremos via Scatter
     // Logicamente tratamos la matriz n x n como un arreglo 1D de tamaño n*n
     double *localA = (double*)malloc(sizeof(double)*stripSize*n);
@@ -128,7 +127,7 @@ int main(int argc, char* argv[]){
     tick[0] = MPI_Wtime();
 
     //Etapa 0: Cálculo de estadísticas en paralelo usando MPI_Scatter
-    //Trabajamos la amtriz en bloques contiguos de stripSize*n elementos
+    //Trabajamos la matriz en bloques contiguos de stripSize*n elementos
     MPI_Scatter(a, stripSize*n, MPI_DOUBLE, localA, stripSize*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
     MPI_Scatter(b, stripSize*n, MPI_DOUBLE, localB, stripSize*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
 
@@ -142,7 +141,8 @@ int main(int argc, char* argv[]){
     double localMaxB = localB[0];
     double localSumB = 0.0;
 
-    // Calculo local de estadisticas recorriendo el arreglo lineal local
+    #pragma omp parallel for reduction(min:localMinA) reduction(max:localMaxA) reduction(+:localSumA) \
+        reduction(min:localMinB) reduction(max:localMaxB) reduction(+:localSumB)
     for (i = 0; i < stripSize*n; i++) {
         double valA = localA[i];
         double valB = localB[i];
@@ -167,6 +167,8 @@ int main(int argc, char* argv[]){
     double globalSumB = localSumB;
 
     // MPI_Reduce con operaciones predefinidas
+    // prametros del MPI_Reduce:
+    // - sendbuf:recvbuf:count:datatype:op:root:comm:
     MPI_Reduce(&localMinA, &globalMinA, 1, MPI_DOUBLE, MPI_MIN, COORDINADOR, MPI_COMM_WORLD);
     MPI_Reduce(&localMaxA, &globalMaxA, 1, MPI_DOUBLE, MPI_MAX, COORDINADOR, MPI_COMM_WORLD);
     MPI_Reduce(&localSumA, &globalSumA, 1, MPI_DOUBLE, MPI_SUM, COORDINADOR, MPI_COMM_WORLD);
@@ -175,16 +177,15 @@ int main(int argc, char* argv[]){
     MPI_Reduce(&localSumB, &globalSumB, 1, MPI_DOUBLE, MPI_SUM, COORDINADOR, MPI_COMM_WORLD);
 
     tick[3] = MPI_Wtime();
-
+    
+    #pragma omp single 
     if (rank == COORDINADOR) {
         double promA = globalSumA / (n * n);
         double promB = globalSumB / (n * n);
-        
         // Calculamos la constante que usaremos en Etapa 3
         constante = ((globalMaxA * globalMaxB) - (globalMinA * globalMinB)) / (promA * promB);
     }
-
-    // Broadcasteamos la constante a todos los procesos (contamos este overhead)
+    // Broadcasteamos la constante a todos los procesos
     double bcast_start = MPI_Wtime();
     MPI_Bcast(&constante, 1, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
     double bcast_end = MPI_Wtime();
@@ -248,13 +249,13 @@ int main(int argc, char* argv[]){
     // Linearizar: para cada columna j, las filas stripStart..stripStart+stripSize-1
     double *sendD = (double*)malloc(sizeof(double) * stripSize * n);
     
+    #pragma omp parallel for schedule(static)
     // Copiar franja de d (column-major) a sendD linealmente
     for (j = 0; j < n; j++) {
         for (i = 0; i < stripSize; i++) {
             sendD[i + j * stripSize] = d[stripStart + i + j * n];
         }
     }
-    
     // Allgather: d recibe D completa, bloques de cada proceso
     MPI_Allgather(sendD, stripSize*n, MPI_DOUBLE, d, stripSize*n, MPI_DOUBLE, MPI_COMM_WORLD);
     free(sendD);
@@ -265,6 +266,7 @@ int main(int argc, char* argv[]){
     // d contiene bloques lineales: [p=0: filas stripSize linearizadas], [p=1: ...], etc.
     // Necesitamos: dFull[i + j*n] donde i es fila global, j es columna
     double *dFull = (double*)malloc(sizeof(double) * n * n);
+    #pragma omp parallel for schedule(static)
     for (int p = 0; p < numProcs; p++) {
         int pStripStart = p * stripSize;
         int blockOffset = p * stripSize * n;
@@ -296,7 +298,7 @@ int main(int argc, char* argv[]){
 
     // Etapa 3: Multiplicación escalar R = constante × R
     tick[10] = MPI_Wtime();
-
+    
     for (i = stripStart*n; i < (stripStart+stripSize)*n; i++) {
         r[i] *= constante;
     }

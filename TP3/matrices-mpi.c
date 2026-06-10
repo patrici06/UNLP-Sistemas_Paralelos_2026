@@ -68,10 +68,10 @@ int main(int argc, char* argv[]){
     }
     
     MPI_Init(&argc, &argv);
-    
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+    
+    //validaciones sobre las entradas
     if (p != numProcs) {
         if (rank == COORDINADOR)
             printf("Error: cantidad de procesos indicada (%d) no coincide con MPI_Comm_size (%d)\n", p, numProcs);
@@ -88,30 +88,33 @@ int main(int argc, char* argv[]){
     stripSize = n / numProcs;
 
     int BS = BS_FIXED;
+    // Ajustar BS si stripSize es menor
     if (stripSize < BS) BS = stripSize;
+    // Ajustar BS si n es menor, solo util para testing
     if (n < BS) BS = n;
-
+    //validacion si es o no multiplo
     if (n % BS != 0) {
         if (rank == COORDINADOR)
             printf("Error: n (%d) debe ser multiplo de BS (%d)\n", n, BS);
         MPI_Finalize();
         return 1;
     }
-
-    /* Reservamos espacio en memoria de las matrices */        
+    if (rank == COORDINADOR){
+    /* Reservamos espacio en memoria de las matrices completa */        
     a = (double*) malloc(sizeof(double)*n*n);
     b = (double*) malloc(sizeof(double)*n*n);
     d = (double*) malloc(sizeof(double)*n*n);
     r = (double*) malloc(sizeof(double)*n*n);
-    // Inicialización
+    
     for (i = 0; i < n; i++) {
-      for (j = 0; j < n; j++) {
-        // Inicializamos A en row-major y B en row-major
-        a[i*n + j] = (double)(i + j + 1);
-        b[i*n + j] = (double)(i - j + 1);
-        d[i + j*n] = 0.0;
-        r[i*n + j] = 0.0;
-       }
+        for (j = 0; j < n; j++) {
+            // Inicializamos A en row-major y B en row-major
+            a[i*n + j] = (double)(i + j + 1);
+            b[i*n + j] = (double)(i - j + 1);
+            d[i + j*n] = 0.0;
+            r[i*n + j] = 0.0;
+        }
+        }
     }
 
     // Reservamos espacio para las porciones locales que recibiremos via Scatter
