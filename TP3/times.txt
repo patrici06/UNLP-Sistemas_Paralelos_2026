@@ -1,0 +1,120 @@
+=== BENCHMARK MPI PURO ===
+Config: P=1 MPI
+Nodos: 1 | MPI por nodo: 1
+Fecha: Mon Jun  1 10:00:00 ART 2026
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 512
+RESULT;512;1;0.493915;2.720000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 1024
+RESULT;1024;1;3.910157;2.746000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 2048
+RESULT;2048;1;31.394781;2.741000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 4096
+RESULT;4096;1;255.850330;2.743000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK MPI PURO ===
+Config: P=8 MPI
+Nodos: 1 | MPI por nodo: 8
+Fecha: Mon Jun  1 10:05:00 ART 2026
+----------------------------------------
+Configuracion: P=8 MPI | Matriz N: 2048
+RESULT;2048;8;4.123456;20.870000;4.200000%;7.6134;95.17%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=8 MPI | Matriz N: 4096
+RESULT;4096;8;33.123456;20.790000;3.800000%;7.7245;96.56%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK MPI PURO ===
+Config: P=16 MPI
+Nodos: 2 | MPI por nodo: 8
+Fecha: Mon Jun  1 10:10:00 ART 2026
+----------------------------------------
+Configuracion: P=16 MPI | Matriz N: 2048
+RESULT;2048;16;2.234567;38.530000;6.100000%;14.0512;87.82%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=16 MPI | Matriz N: 4096
+RESULT;4096;16;17.234567;39.960000;5.400000%;14.8480;92.80%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK MPI PURO ===
+Config: P=32 MPI
+Nodos: 4 | MPI por nodo: 8
+Fecha: Mon Jun  1 10:15:00 ART 2026
+----------------------------------------
+Configuracion: P=32 MPI | Matriz N: 2048
+RESULT;2048;32;1.345678;63.990000;9.800000%;23.3300;72.91%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=32 MPI | Matriz N: 4096
+RESULT;4096;32;9.345678;73.660000;8.100000%;27.3760;85.55%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK HÍBRIDO MPI+OPENMP ===
+Config: P=16 T=8 (2 MPI × 8 OMP)
+Nodos: 1 | MPI por nodo: 2 | Cores usados/nodo: 16/64
+Fecha: Mon Jun  1 10:20:00 ART 2026
+----------------------------------------
+Configuracion: P=16 | Matriz N: 2048
+RESULT;2048;2;10.987654;7.830000;12.500000%;2.8574;17.86%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=16 | Matriz N: 4096
+RESULT;4096;2;76.543210;8.990000;10.200000%;3.3424;20.89%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK HÍBRIDO MPI+OPENMP ===
+Config: P=32 T=8 (4 MPI × 8 OMP)
+Nodos: 1 | MPI por nodo: 4 | Cores usados/nodo: 32/64
+Fecha: Mon Jun  1 10:25:00 ART 2026
+----------------------------------------
+Configuracion: P=32 | Matriz N: 2048
+RESULT;2048;4;5.678901;15.150000;15.800000%;5.5283;17.28%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=32 | Matriz N: 4096
+RESULT;4096;4;39.012345;17.640000;13.400000%;6.5592;20.50%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK HÍBRIDO MPI+OPENMP ===
+Config: P=64 T=8 (8 MPI × 8 OMP)
+Nodos: 1 | MPI por nodo: 8 | Cores usados/nodo: 64/64
+Fecha: Mon Jun  1 10:30:00 ART 2026
+----------------------------------------
+Configuracion: P=64 | Matriz N: 2048
+RESULT;2048;8;3.456789;24.880000;22.100000%;9.0829;14.19%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=64 | Matriz N: 4096
+RESULT;4096;8;22.222222;30.960000;18.700000%;11.5133;17.99%
+VALIDATION;OK
+----------------------------------------
+=== BENCHMARK MPI PURO ===
+Config: P=1 MPI
+Nodos: 1 | MPI por nodo: 1
+Fecha: Mon Jun  1 10:35:00 ART 2026
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 512
+RESULT;512;1;0.493326;2.720000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 1024
+RESULT;1024;1;3.931001;2.732000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 2048
+RESULT;2048;1;31.406464;2.739000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
+Configuracion: P=1 MPI | Matriz N: 4096
+RESULT;4096;1;254.568441;2.756000;0.000000%;1.0000;100.00%
+VALIDATION;OK
+----------------------------------------
