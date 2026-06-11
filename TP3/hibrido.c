@@ -129,7 +129,8 @@ int main(int argc, char *argv[]) {
 
         #pragma omp barrier
 
-        // D_local = B x B^T (nuestra franja de filas)
+        // D = B x B^T (solo nuestra franja de filas, row-major)
+        //   Usamos simetria de D: en Stage 2 leer D[j][k] = D_actual[k][j]
         #pragma omp for schedule(static)
         for (int ii = 0; ii < stripSize; ii += BS) {
             int i = stripStart + ii;
@@ -146,24 +147,19 @@ int main(int argc, char *argv[]) {
     }
 
     tick[2] = MPI_Wtime();
-
     // Compartir D completa via Allgather
     MPI_Allgather(D_local, stripSize * n, MPI_DOUBLE,
                   D, stripSize * n, MPI_DOUBLE, MPI_COMM_WORLD);
-    free(D_local);
-
     tick[3] = MPI_Wtime();
 
     // R_local = A_local x D
     #pragma omp parallel for schedule(static)
     for (int ii = 0; ii < stripSize; ii += BS) {
-        int i = stripStart + ii;
-        int in = i * n;
         int local_in = ii * n;
         for (int j = 0; j < n; j += BS) {
             int jn = j * n;
             for (int k = 0; k < n; k += BS) {
-                blkmulRowColRow(&A_local[local_in + k], &D[k + jn],
+                blkmulRowColRow(&A_local[local_in + k], &D[jn + k],
                                 &R_local[local_in + j], n, BS);
             }
         }
@@ -221,7 +217,7 @@ int main(int argc, char *argv[]) {
         free(R_global);
     }
 
-    free(A_local); free(B); free(D);
+    free(A_local); free(B); free(D_local); free(D);
     free(R_local);
     MPI_Finalize();
     return 0;
@@ -229,10 +225,10 @@ int main(int argc, char *argv[]) {
 
 double sequential_times(int n) {
     switch(n) {
-        case 512:  return 2.040698;
-        case 1024: return 16.383931;
-        case 2048: return 131.447305;
-        case 4096: return 1052.775582;
+        case 512:  return 0.493326;
+        case 1024: return 3.931001;
+        case 2048: return 31.406464;
+        case 4096: return 254.568441;
         default:   return -1.0;
     }
 }

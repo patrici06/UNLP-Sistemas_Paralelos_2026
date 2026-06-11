@@ -8,23 +8,7 @@
 #define BS_FIXED 64
 #define COORDINADOR 0
 
-// Tiempos secuenciales de referencia (para calcular speedup)
-// Estos valores se actualizan manualmente cuando se ejecuta matrices-open-mp.c
-double sequential_times(int n) {
-    switch(n) {
-        case 512:  return 2.040698;
-        case 1024: return 16.383931;
-        case 2048: return 131.447305;
-        case 4096: return 1052.775582;
-        default:   return -1.0;
-    }
-} 
-
-// Vamos a definir como deberia de plantearse el problema 
-// Tenemos etapas nuevamente, esta son dentro de si mismas independientes
-// Tenemos que paralelizar en todas las etapas por datos, y nuestro objetivo sera paralelizar las salidas. 
-
-//Funciones heredadas de TP2, veremos si tienen sentido luego
+double sequential_times(int n);
 double dwalltime();
 void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs);
 void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs);
@@ -32,141 +16,94 @@ void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs);
 void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs);
 void print_matrix(double *mat, int n, const char *name, int max_print);
 
-// TIMER
 double dwalltime() {
     double sec;
     struct timeval tv;
-
     gettimeofday(&tv, NULL);
     sec = tv.tv_sec + tv.tv_usec/1000000.0;
     return sec;
 }
 
-
 int main(int argc, char* argv[]){
-	int i, 
-    j,
-    k,
-    numProcs, 
-    rank,
-    n, 
-    stripSize,
-    check=1;
-	double *a, *b, *d, *r;
-	MPI_Status status;
-    //variables necesarias para calcular overhead de comunicacion, que tedioso que es
-	double commTime, totalTime, tick[14];
+    int numProcs, rank, n, stripSize;
     double constante;
-	
-    int p, print_matrices = 0;
-	if ((argc < 3) || ((n = atoi(argv[1])) <= 0) || ((p = atoi(argv[2])) <= 0)) {
-	    printf("\nUsar: %s size procs [print]\n  size: Dimension de las matrices\n  procs: Cantidad de procesos MPI\n  print: (opcional) 1 para imprimir matrices (solo n <= 4)\n", argv[0]);
-		exit(1);
-	}
-    if (argc >= 4) {
-        print_matrices = atoi(argv[3]);
+    int print_matrices = 0;
+
+    if ((argc < 2) || ((n = atoi(argv[1])) <= 0)) {
+        printf("\nUsar: %s size [print]\n  size: Dimension de las matrices\n  print: (opcional) 1 para imprimir matrices (solo n <= 4)\n", argv[0]);
+        exit(1);
     }
-    
+    if (argc >= 3) {
+        print_matrices = atoi(argv[2]);
+    }
+
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
-    //validaciones sobre las entradas
-    if (p != numProcs) {
-        if (rank == COORDINADOR)
-            printf("Error: cantidad de procesos indicada (%d) no coincide con MPI_Comm_size (%d)\n", p, numProcs);
-        MPI_Finalize();
-        return 1;
-    }
 
     if (n % numProcs != 0) {
         if (rank == COORDINADOR)
-            printf("Error: n (%d) debe ser multiplo de numProcs (%d)\n", n, numProcs);
-        MPI_Finalize();
-        return 1;
+            printf("Error: n debe ser multiplo de numProcs\n");
+        MPI_Finalize(); return 1;
     }
     stripSize = n / numProcs;
+    int stripStart = rank * stripSize;
 
     int BS = BS_FIXED;
-    // Ajustar BS si stripSize es menor
     if (stripSize < BS) BS = stripSize;
-    // Ajustar BS si n es menor, solo util para testing
     if (n < BS) BS = n;
-    //validacion si es o no multiplo
     if (n % BS != 0) {
         if (rank == COORDINADOR)
-            printf("Error: n (%d) debe ser multiplo de BS (%d)\n", n, BS);
-        MPI_Finalize();
-        return 1;
-    }
-    if (rank == COORDINADOR){
-    /* Reservamos espacio en memoria de las matrices completa */        
-    a = (double*) malloc(sizeof(double)*n*n);
-    b = (double*) malloc(sizeof(double)*n*n);
-    d = (double*) malloc(sizeof(double)*n*n);
-    r = (double*) malloc(sizeof(double)*n*n);
-    
-    for (i = 0; i < n; i++) {
-        for (j = 0; j < n; j++) {
-            // Inicializamos A en row-major y B en row-major
-            a[i*n + j] = (double)(i + j + 1);
-            b[i*n + j] = (double)(i - j + 1);
-            d[i + j*n] = 0.0;
-            r[i*n + j] = 0.0;
-        }
-        }
+            printf("Error: n debe ser multiplo de BS (%d)\n", BS);
+        MPI_Finalize(); return 1;
     }
 
-    // Reservamos espacio para las porciones locales que recibiremos via Scatter
-    // Logicamente tratamos la matriz n x n como un arreglo 1D de tamaño n*n
-    double *localA = (double*)malloc(sizeof(double)*stripSize*n);
-    double *localB = (double*)malloc(sizeof(double)*stripSize*n);
+    double *A_local = (double*)malloc(stripSize * n * sizeof(double));
+    double *B = (double*)malloc(n * n * sizeof(double));
+    double *D_local = (double*)calloc((size_t)stripSize * n, sizeof(double));
+    double *D = (double*)malloc(n * n * sizeof(double));
+    double *R_local = (double*)calloc((size_t)stripSize * n, sizeof(double));
+    double *A_global = NULL, *R_global = NULL;
 
-    // Sincronizamos todos los procesos antes de medir
+    if (rank == COORDINADOR) {
+        A_global = (double*)malloc(n * n * sizeof(double));
+        R_global = (double*)malloc(n * n * sizeof(double));
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) {
+                A_global[i*n + j] = (double)(i + j + 1);
+                B[i*n + j] = (double)(i - j + 1);
+            }
+    }
+
+    double tick[6];
     MPI_Barrier(MPI_COMM_WORLD);
-
     tick[0] = MPI_Wtime();
 
-    //Etapa 0: Cálculo de estadísticas en paralelo usando MPI_Scatter
-    //Trabajamos la amtriz en bloques contiguos de stripSize*n elementos
-    MPI_Scatter(a, stripSize*n, MPI_DOUBLE, localA, stripSize*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
-    MPI_Scatter(b, stripSize*n, MPI_DOUBLE, localB, stripSize*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
-
+    // Distribuir datos
+    MPI_Scatter(A_global, stripSize*n, MPI_DOUBLE, A_local, stripSize*n,
+                MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
+    MPI_Bcast(B, n*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
     tick[1] = MPI_Wtime();
 
-    // Variables locales para estadisticas sobre la porcion recibida
-    double localMinA = localA[0];
-    double localMaxA = localA[0];
-    double localSumA = 0.0;
-    double localMinB = localB[0];
-    double localMaxB = localB[0];
-    double localSumB = 0.0;
+    // Estadisticas sobre la porcion local
+    double localMinA = A_local[0], localMaxA = A_local[0], localSumA = 0.0;
+    double localMinB = B[stripStart*n], localMaxB = B[stripStart*n], localSumB = 0.0;
 
-    // Calculo local de estadisticas recorriendo el arreglo lineal local
-    for (i = 0; i < stripSize*n; i++) {
-        double valA = localA[i];
-        double valB = localB[i];
-
+    for (int i = 0; i < stripSize*n; i++) {
+        double valA = A_local[i];
         if (valA < localMinA) localMinA = valA;
         if (valA > localMaxA) localMaxA = valA;
         localSumA += valA;
-
+    }
+    for (int i = 0; i < stripSize*n; i++) {
+        double valB = B[stripStart*n + i];
         if (valB < localMinB) localMinB = valB;
         if (valB > localMaxB) localMaxB = valB;
         localSumB += valB;
     }
 
-    tick[2] = MPI_Wtime();
-
-    // Usar MPI_Reduce para calcular min, max, suma de forma eficiente
-    double globalMinA = localMinA;
-    double globalMaxA = localMaxA;
-    double globalSumA = localSumA;
-    double globalMinB = localMinB;
-    double globalMaxB = localMaxB;
-    double globalSumB = localSumB;
-
-    // MPI_Reduce con operaciones predefinidas
+    double globalMinA, globalMaxA, globalSumA;
+    double globalMinB, globalMaxB, globalSumB;
     MPI_Reduce(&localMinA, &globalMinA, 1, MPI_DOUBLE, MPI_MIN, COORDINADOR, MPI_COMM_WORLD);
     MPI_Reduce(&localMaxA, &globalMaxA, 1, MPI_DOUBLE, MPI_MAX, COORDINADOR, MPI_COMM_WORLD);
     MPI_Reduce(&localSumA, &globalSumA, 1, MPI_DOUBLE, MPI_SUM, COORDINADOR, MPI_COMM_WORLD);
@@ -174,251 +111,128 @@ int main(int argc, char* argv[]){
     MPI_Reduce(&localMaxB, &globalMaxB, 1, MPI_DOUBLE, MPI_MAX, COORDINADOR, MPI_COMM_WORLD);
     MPI_Reduce(&localSumB, &globalSumB, 1, MPI_DOUBLE, MPI_SUM, COORDINADOR, MPI_COMM_WORLD);
 
-    tick[3] = MPI_Wtime();
-
     if (rank == COORDINADOR) {
         double promA = globalSumA / (n * n);
         double promB = globalSumB / (n * n);
-        
-        // Calculamos la constante que usaremos en Etapa 3
-        constante = ((globalMaxA * globalMaxB) - (globalMinA * globalMinB)) / (promA * promB);
+        constante = (globalMaxA * globalMaxB - globalMinA * globalMinB) / (promA * promB);
+    }
+    MPI_Bcast(&constante, 1, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
+    tick[2] = MPI_Wtime();
+
+    // Etapa 1: D = B x B^T (solo nuestra franja de filas, row-major)
+    //   Dependemos de la simetria de D: en Stage 2 leer D[j][k] = D_actual[k][j]
+    for (int i = stripStart; i < stripStart + stripSize; i += BS) {
+        int in = i * n;
+        int local_in = (i - stripStart) * n;
+        for (int j = 0; j < n; j += BS) {
+            int jn = j * n;
+            for (int k = 0; k < n; k += BS) {
+                blkmulRowColRow(&B[in + k], &B[k + jn], &D_local[local_in + j], n, BS);
+            }
+        }
+    }
+    tick[3] = MPI_Wtime();
+
+    // Compartir D completa via Allgather
+    MPI_Allgather(D_local, stripSize*n, MPI_DOUBLE, D, stripSize*n, MPI_DOUBLE, MPI_COMM_WORLD);
+
+    // Etapa 2: R_local = A_local x D
+    for (int ii = 0; ii < stripSize; ii += BS) {
+        int local_in = ii * n;
+        for (int j = 0; j < n; j += BS) {
+            int jn = j * n;
+            for (int k = 0; k < n; k += BS) {
+                blkmulRowColRow(&A_local[local_in + k], &D[jn + k],
+                                &R_local[local_in + j], n, BS);
+            }
+        }
     }
 
-    // Broadcasteamos la constante a todos los procesos (contamos este overhead)
-    double bcast_start = MPI_Wtime();
-    MPI_Bcast(&constante, 1, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
-    double bcast_end = MPI_Wtime();
-
-    // Etapa 1: Producto de B por B^T -> D
-    // Cada proceso tiene solo su franja de B en localB (stripSize filas).
-    // Para calcular D = B * B^T, cada proceso necesita la matriz B completa
-    // (todas las filas), no solo su franja. Por lo tanto, usamos MPI_Allgather
-    // para distribuir B completa a todos los procesos.
-    // Luego cada proceso calcula su franja de D (filas stripStart..stripEnd-1)
-    // usando matmulblksRowColCol (bloques row-col-col), que produce salida
-    // row-major. Esto hace que cada franja sea contigua en memoria, ideal
-    // para MPI_Gather.
-    // Finalmente MPI_Gather recolecta las franjas de D en el coordinador.
-
-    int stripStart = rank * stripSize;
-    double *fullB = (double*)malloc(sizeof(double) * n * n);
+    // R *= constante
+    for (int i = 0; i < stripSize * n; i++)
+        R_local[i] *= constante;
 
     tick[4] = MPI_Wtime();
 
-    // Compartimos B completa con todos los procesos via Allgather
-    // Allgather es la mejor opcion porque todos los procesos necesitan B completa,
-    // y Allgather la obtiene con implementacion interna ring (topologia de anillo)
-    MPI_Allgather(localB, stripSize*n, MPI_DOUBLE, fullB, stripSize*n, MPI_DOUBLE, MPI_COMM_WORLD);
+    // Gather R
+    MPI_Gather(R_local, stripSize*n, MPI_DOUBLE, R_global, stripSize*n,
+               MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
 
     tick[5] = MPI_Wtime();
 
-    // Producto B * B^T -> D (row-col-col)
-    // Usamos matmulblksRowColCol(a=B, b=B, c=D) que da salida column-major.
-    // D[i][j] = sum_k B[i][k] * B[j][k]  (B^T equivale a acceder a B[j][k])
-    // Cada proceso calcula su franja de filas de D (en column-major)
-    // Fila i en column-major: d[i + 0*n], d[i + 1*n], ..., d[i + (n-1)*n]
-    for (i = stripStart; i < stripStart + stripSize; i += BS) {
-        int in = i * n;
-        for (j = 0; j < n; j += BS) {
-            int jn = j * n;
-            for (k = 0; k < n; k += BS) {
-                blkmulRowColCol(&fullB[in + k], &fullB[k + jn], &d[i + jn], n, BS);
-            }
-        }
-    }
-
-    tick[6] = MPI_Wtime();
-
-    // Etapa 1 finaliza: D está distribuido en column-major
-    // Cada proceso tiene su franja de filas (stripStart..stripStart+stripSize-1) 
-    // almacenadas en column-major: d[i + j*n]
-
-    free(fullB);
-
-    // Etapa 2: Producto de A por D -> R
-    // D está distribuido en column-major (desde Etapa 1 con matmulblksRowColCol).
-    // MPI_Allgather D para obtener D completa en column-major.
-    // Usar blkmulRowColRow directamente SIN transposición.
-
-    tick[7] = MPI_Wtime();
-
-    // Allgather D: cada proceso envía su franja de filas (stripSize filas en column-major)
-    // Linearizar: para cada columna j, las filas stripStart..stripStart+stripSize-1
-    double *sendD = (double*)malloc(sizeof(double) * stripSize * n);
-    
-    // Copiar franja de d (column-major) a sendD linealmente
-    for (j = 0; j < n; j++) {
-        for (i = 0; i < stripSize; i++) {
-            sendD[i + j * stripSize] = d[stripStart + i + j * n];
-        }
-    }
-    
-    // Allgather: d recibe D completa, bloques de cada proceso
-    MPI_Allgather(sendD, stripSize*n, MPI_DOUBLE, d, stripSize*n, MPI_DOUBLE, MPI_COMM_WORLD);
-    free(sendD);
-
-    tick[8] = MPI_Wtime();
-
-    // Reorganizar d para column-major correcto
-    // d contiene bloques lineales: [p=0: filas stripSize linearizadas], [p=1: ...], etc.
-    // Necesitamos: dFull[i + j*n] donde i es fila global, j es columna
-    double *dFull = (double*)malloc(sizeof(double) * n * n);
-    for (int p = 0; p < numProcs; p++) {
-        int pStripStart = p * stripSize;
-        int blockOffset = p * stripSize * n;
-        for (j = 0; j < n; j++) {
-            for (i = 0; i < stripSize; i++) {
-                // d[blockOffset + i + j*stripSize] contiene la fila pStripStart+i, columna j
-                dFull[pStripStart + i + j * n] = d[blockOffset + i + j * stripSize];
-            }
-        }
-    }
-
-    // Computar R = A × D para las filas locales [stripStart, stripStart+stripSize)
-    // usando blkmulRowColRow: A en row-major, D (dFull) en column-major, R en row-major
-    for (i = stripStart; i < stripStart + stripSize; i += BS) {
-        int in = i * n;
-        for (j = 0; j < n; j += BS) {
-            int jn = j * n;
-            for (k = 0; k < n; k += BS) {
-                blkmulRowColRow(&a[in + k], &dFull[jn + k], &r[in + j], n, BS);
-            }
-        }
-    }
-    
-    free(dFull);
-
-    tick[9] = MPI_Wtime();
-
-    // Etapa 3: Multiplicación escalar R = constante × R
-    //paralelizada: cada proceso multiplica su franja
-
-    tick[10] = MPI_Wtime();
-
-    for (i = stripStart*n; i < (stripStart+stripSize)*n; i++) {
-        r[i] *= constante;
-    }
-
-    tick[11] = MPI_Wtime();
-
-    // Gather R final al coordinador
-    tick[12] = MPI_Wtime();
-
-    double *sendR = (double*)malloc(sizeof(double) * stripSize * n);
-    // Copiar franja local de r a sendR mediante loop explícito
-    for (i = 0; i < stripSize * n; i++) {
-        sendR[i] = r[stripStart*n + i];
-    }
-    MPI_Gather(sendR, stripSize*n, MPI_DOUBLE, r, stripSize*n, MPI_DOUBLE, COORDINADOR, MPI_COMM_WORLD);
-    free(sendR);
-
-    tick[13] = MPI_Wtime();
-
-    // Impresión de resultado y validación (antes de liberar memoria)
     if (rank == COORDINADOR) {
-        double totalWorkTime = tick[13] - tick[0];
-        double gflops = ((double)2*n*n*n) / (totalWorkTime * 1e9);
-        
-        // Calcular overhead de comunicaciones total - 
-	// Etapa 0: 
-        //   - tick[0..1]: MPI_Scatter (A,B)
-        //   - tick[2..3]: MPI_Reduce (min, max, sum)
-        //   - bcast_start..bcast_end: MPI_Bcast (constante)
-        // Etapa 1: tick[4..5]: MPI_Allgather (B completa)
-        // Etapa 2: tick[7..8]: MPI_Allgather (D completa)
-        // Gather final: tick[12..13]: MPI_Gather (R)
-        double commOverhead = (tick[1] - tick[0]) +           // Scatter A,B
-                              (tick[3] - tick[2]) +           // Reduce (min,max,sum)
-                              (bcast_end - bcast_start) +     // Bcast constante
-                              (tick[5] - tick[4]) +           // Allgather B
-                              (tick[8] - tick[7]) +           // Allgather D
-                              (tick[13] - tick[12]);          // Gather R final
-        
-        double commPercent = (commOverhead / totalWorkTime) * 100.0;
-        
-        // Calcular speedup y eficiencia respecto a secuencial
+        double totalTime = tick[5] - tick[0];
+        double gflops = (2.0 * n * n * n) / (totalTime * 1e9);
+        double commTime = (tick[1] - tick[0])  // Scatter + Bcast
+                        + (tick[4] - tick[3])  // Allgather D
+                        + (tick[5] - tick[4]); // Gather R (incluye R compute)
+        double commPercent = (commTime / totalTime) * 100.0;
+
         double seq_time = sequential_times(n);
-        char speedup_str[16], efficiency_str[16];
+        char speedup_str[16], eff_str[16];
         if (seq_time > 0) {
-            double speedup = seq_time / totalWorkTime;
+            double speedup = seq_time / totalTime;
             double efficiency = (speedup / numProcs) * 100.0;
             snprintf(speedup_str, sizeof(speedup_str), "%.4f", speedup);
-            snprintf(efficiency_str, sizeof(efficiency_str), "%.2f%%", efficiency);
+            snprintf(eff_str, sizeof(eff_str), "%.2f%%", efficiency);
         } else {
             snprintf(speedup_str, sizeof(speedup_str), "N/A");
-            snprintf(efficiency_str, sizeof(efficiency_str), "N/A");
+            snprintf(eff_str, sizeof(eff_str), "N/A");
         }
-        
-	//RESULT;N;P;Tiempo;GFLOPS;commOverhead%;speedup;efficiency
-	printf("RESULT;%d;%d;%lf;%lf;%.6f%%;%s;%s\n", n, numProcs, totalWorkTime, gflops, commPercent, speedup_str, efficiency_str);
 
-        // Validación contra referencia secuencial
+        printf("RESULT;%d;%d;%lf;%lf;%.6f%%;%s;%s\n",
+               n, numProcs, totalTime, gflops, commPercent,
+               speedup_str, eff_str);
+
         if (n <= 128) {
-            // Computar referencia secuencial para validación
-            double *refD = (double*)calloc(n * n, sizeof(double));
-            double *refR = (double*)calloc(n * n, sizeof(double));
-            
-            matmulblksRowColCol(b, b, refD, n, BS);
-            matmulblksRowColRow(a, refD, refR, n, BS);
-            
-            // Aplicar constante a referencia
-            for (i = 0; i < n*n; i++) {
-                refR[i] *= constante;
-            }
-            
-            // Comparar R contra refR
-            int diff_count = 0;
-            for (i = 0; i < n; i++) {
-                for (j = 0; j < n; j++) {
-                    // r: row-major, refR: row-major (ambas)
-                    if (fabs(r[i*n + j] - refR[i*n + j]) > 1e-10) {
-                        diff_count++;
-                    }
-                }
-            }
-            
-            if (diff_count == 0)
-                printf("VALIDATION;OK\n");
-            else
-                printf("VALIDATION;ERROR;%d diferencias en R\n", diff_count);
-            
-            free(refD);
-            free(refR);
+            double *refD = (double*)calloc(n*n, sizeof(double));
+            double *refR = (double*)calloc(n*n, sizeof(double));
+            matmulblksRowColCol(B, B, refD, n, BS);
+            matmulblksRowColRow(A_global, refD, refR, n, BS);
+            for (int i = 0; i < n*n; i++) refR[i] *= constante;
+
+            int diff = 0;
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    if (fabs(R_global[i*n + j] - refR[i*n + j]) > 1e-10)
+                        diff++;
+            printf("%s\n", diff == 0 ? "VALIDATION;OK" : "VALIDATION;ERROR");
+            free(refD); free(refR);
         }
 
-        // ========================================
-        // Impresión de matrices si print_matrices=1
-        // ========================================
         if (print_matrices && n <= 4) {
             printf("\nCONSTANTE = %.6f\n", constante);
-            print_matrix(d, n, "MATRIZ D = B x B^T", n);
-            print_matrix(r, n, "MATRIZ R = A x D x k", n);
+            print_matrix(A_global, n, "MATRIZ A", n);
+            print_matrix(B, n, "MATRIZ B", n);
+            print_matrix(D, n, "MATRIZ D = B x B^T", n);
+            print_matrix(R_global, n, "MATRIZ R = A x D x k", n);
         }
+
+        free(A_global);
+        free(R_global);
     }
 
-    // Liberar buffers y finalizar MPI
-    free(a);
-    free(b);
-    free(d);
-    free(r);
-    free(localA);
-    free(localB);
-
+    free(A_local); free(B); free(D_local); free(D); free(R_local);
     MPI_Finalize();
     return 0;
 }
 
-// ========================================
-// FUNCTION: matmulblksRowColCol
-// Multiplicación B x B^T -> D (row-col-col)
-// Paralelizada a nivel de bloques
-// ========================================
+double sequential_times(int n) {
+    switch(n) {
+        case 512:  return 0.493915;
+        case 1024: return 3.910157;
+        case 2048: return 31.394781;
+        case 4096: return 255.850330;
+        default:   return -1.0;
+    }
+}
+
 void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
     int i, j, k;
     for (i = 0; i < n; i += bs) {
         int in = i*n;
         for (j = 0; j < n; j += bs) {
-            int jn = j*n;    
+            int jn = j*n;
             for (k = 0; k < n; k += bs) {
                 blkmulRowColCol(&a[in + k], &b[k + jn], &c[i + jn], n, bs);
             }
@@ -426,15 +240,10 @@ void matmulblksRowColCol(double *a, double *b, double *c, int n, int bs) {
     }
 }
 
-// ========================================
-// FUNCTION: matmulblksRowColRow
-// Multiplicación A x D -> R (row-col-row)
-// Paralelizada a nivel de bloques
-// ========================================
 void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
     int i, j, k;
     for (i = 0; i < n; i += bs) {
-        int in = i*n;    
+        int in = i*n;
         for (j = 0; j < n; j += bs) {
             int jn = j*n;
             for (k = 0; k < n; k += bs) {
@@ -444,10 +253,6 @@ void matmulblksRowColRow(double *a, double *b, double *c, int n, int bs) {
     }
 }
 
-// ========================================
-// FUNCTION: blkmulRowColCol
-// Multiplicación especializada: A row-major, B column-major, C column-major
-// ========================================
 void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
     for (int i = 0; i < bs; i++) {
         int in = i * n;
@@ -462,10 +267,6 @@ void blkmulRowColCol(double *ablk, double *bblk, double *cblk, int n, int bs) {
     }
 }
 
-// ========================================
-// FUNCTION: blkmulRowColRow
-// Multiplicación especializada: A row-major, B column-major, C row-major
-// ========================================
 void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
     for (int i = 0; i < bs; i++) {
         int in = i * n;
@@ -480,18 +281,10 @@ void blkmulRowColRow(double *ablk, double *bblk, double *cblk, int n, int bs) {
     }
 }
 
-// ========================
-// FUNCIONES AUXILIARES
-// ========================
-
-/* Imprime una matriz para debugging */
-void print_matrix(double *mat, int n, const char *name, int max_print)
-{
+void print_matrix(double *mat, int n, const char *name, int max_print) {
     int limit, i, j;
-    
     limit = (n < max_print) ? n : max_print;
     printf("\n%s (%dx%d):\n", name, n, n);
-    
     for (i = 0; i < limit; i++) {
         printf("[ ");
         for (j = 0; j < limit; j++) {

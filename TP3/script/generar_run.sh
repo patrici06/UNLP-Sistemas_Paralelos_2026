@@ -128,7 +128,7 @@ export OMP_NUM_THREADS=${THREADS}
 for N in ${SIZES[*]}
 do
     echo "Configuracion: P=${TOTAL} | Matriz N: \$N" >> \$OUTPUT_FILE
-    mpirun --bind-to none -np ${MPI_PROCS} ${BIN_DIR}/hibrido-pato \$N ${MPI_PROCS} >> \$OUTPUT_FILE
+    mpirun --bind-to none -np ${MPI_PROCS} ${BIN_DIR}/hibrido \$N ${MPI_PROCS} >> \$OUTPUT_FILE
     echo "----------------------------------------" >> \$OUTPUT_FILE
 done
 
@@ -184,8 +184,8 @@ cat <<'INSTRUCTIVO'
    O manualmente desde TP3/:
 
        cd ..
-       mpicc -O2 matrices-mpi.c   -o matrices-mpi   -lm
-       mpicc -O2 hibrido-pato.c   -o hibrido-pato   -fopenmp -lm
+        mpicc -O2 matrices-mpi.c   -o matrices-mpi   -lm
+        mpicc -O2 hibrido.c        -o hibrido        -fopenmp -lm
 
 2. GENERACION DE SCRIPTS
    ─────────────────────────────────────────────────────────────

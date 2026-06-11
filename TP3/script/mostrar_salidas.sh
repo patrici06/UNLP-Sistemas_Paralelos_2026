@@ -111,10 +111,18 @@ if [ -d "$RUNS_DIR" ]; then
         if [[ "$filename" =~ ^P([0-9]+)T([0-9]+)_[0-9]+\.out$ ]]; then
             p=${BASH_REMATCH[1]}
             t=${BASH_REMATCH[2]}
-            origen="Hibrido  |  P=${p} (MPI=$((p/t)) × OMP=${t})"
+            if [ "$p" -eq 1 ] && [ "$t" -eq 1 ]; then
+                origen="Hibrido  |  P=1 T=1 (1 MPI × 1 OMP)  [secuencial]"
+            else
+                origen="Hibrido  |  P=${p} (MPI=$((p/t)) × OMP=${t})"
+            fi
         elif [[ "$filename" =~ ^P([0-9]+)_[0-9]+\.out$ ]]; then
             p=${BASH_REMATCH[1]}
-            origen="MPI puro  |  P=${p}"
+            if [ "$p" -eq 1 ]; then
+                origen="MPI puro  |  P=1  [secuencial]"
+            else
+                origen="MPI puro  |  P=${p}"
+            fi
         else
             origen="$filename"
         fi
@@ -148,7 +156,7 @@ if [ -d "$RUNS_DIR" ]; then
 fi
 
 # =============================================================================
-# 3) hybrid-P* / mpi-P*  —  salidas de blade.sh (output_*.txt)
+# 3) secuencial/ / hybrid-P* / mpi-P*  —  salidas de blade.sh (output_*.txt)
 # =============================================================================
 for dirpat in "hybrid-P*" "mpi-P*"; do
     for outdir in "$BASE_DIR"/$dirpat; do
