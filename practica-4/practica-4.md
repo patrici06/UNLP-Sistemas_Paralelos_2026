@@ -60,12 +60,27 @@ Se opto por que todos los procesos tengan igualdad de roles, dividiendo unicamen
 
 3. Los códigos `blocking-ring.c` y `non-blocking-ring.c` comunican entre procesos mediante un anillo, empleando operaciones bloqueantes y no bloqueantes, respectivamente. Compile y ejecute ambos códigos empleando P={4,8,16} (no importa que el número de núcleos sea menor que la cantidad de procesos) y N={10000000, 20000000, 40000000, ...}. ¿Cuál de los dos algoritmos requiere menos tiempo de comunicación? ¿Por qué?
    - Nota: Para el caso de P=16, agregue la línea `--overcommit` al script de SLURM y el flag `--oversubscribe` al comando `mpirun`.
-   Quien requiere menos tiempo de comunicacion depende, naturalmente a medida que la cantidad de procesos P crece non-blocking gana en cuanto a requerir menos tiempo de comunicacion, tenemos que ver coomo esta estructurado el codigo primero para analizar adecuadamente, con bloqueo el codigo se disenna de mediante un pipeline secuencial, el proceso 0 comienza la secuencia y luego recibe del ultimo. Los procesos intermedios primerop reciben de su anterior y luego envian al siguiente. 
+   La versión no bloqueante requiere siempre menos tiempo de comunicación. La razón es estructural y se explica analizando cómo opera cada versión.
 
-   Esto genera dependencias, el mesaje debe recorrer el anillo de forma serializada. El tiempo de comunicacion sera entonces la suma de cada salto de comunicacion.
-  En el caso de no bloqueante los procesos postean sus envios y recepciones simultaneament. Luego cada proceso espera el completamiento con MPI_Wait. Esto permite que todas las transferencias del anillo se solapen en la red, ejecutandose en paralelo. El timepo de comunicacion no depende de P, sino que el peso de lo que depende sera el tiempo de un solo salto (tecnicamente el mas lento). De ahi la mejora. 
+   **Versión bloqueante** (`blocking-ring.c`): la comunicación se organiza como un **pipeline secuencial**. El proceso P-1 envía primero al 0 (el protocolo eager de MPI_Send permite que retorne rápido para este primer salto). Recién cuando el 0 completa su `MPI_Recv`, puede enviar al 1; el 1 recibe y recién ahí envía al 2, y así sucesivamente. Cada salto depende del anterior, por lo que el tiempo total es la suma de todos los saltos: `T_bloq ≈ P × (latencia + transferencia)`. Crece linealmente con P.
 
-  Analizando los datos en local, se puede ver que para pocos procesos por ejemplo p=4 la penalizacion del pipeline secuencial es mas pequenna, de la misma manera al iniciar las 4 comunicaciones simultaneas en modo no bloqueante se puede generar contencion en los buffers o en la red (todos disparan envio/reserva al mismo tiempo), esto suma overhead naturalmente y no compensa la ventaja de solapamiento.
+   **Versión no bloqueante** (`non-blocking-ring.c`): cada proceso postea su `MPI_Isend` (al siguiente) y su `MPI_Irecv` (del anterior) **inmediatamente, sin esperar a nadie**. Como `MPI_Isend` e `MPI_Irecv` retornan en cuanto registran la operación (no bloquean hasta completar la transferencia), todos los procesos llaman a ambas funciones en simultáneo. En ese momento MPI ya tiene visibilidad completa del patrón de comunicación y puede iniciar todas las transferencias del anillo **concurrentemente en la red**. Luego cada proceso llama a `MPI_Wait` para asegurar que sus datos ya están disponibles, pero el grueso de la transferencia ya ocurrió en paralelo mientras los `MPI_Wait` se ejecutaban. El tiempo total es aproximadamente el del **salto más lento**: `T_noblq ≈ max_i(latencia_i + transferencia_i)`. No depende de la cantidad de procesos P, sino solo del tamaño de los datos y de la peor latencia del anillo.
+
+   **Resultados en el cluster:**
+
+   | N | P | Bloqueante (s) | No Bloqueante (s) | Mejora |
+   |--:|--:|--:|--:|--:|
+   | 10M | 4 | 0.104562 | 0.054842 | 1.91× |
+   | 10M | 8 | 0.236479 | 0.073165 | 3.23× |
+   | 10M | 16 | 0.813434 | 0.210898 | 3.86× |
+   | 20M | 4 | 0.206114 | 0.095325 | 2.16× |
+   | 20M | 8 | 0.466438 | 0.287590 | 1.62× |
+   | 20M | 16 | 1.730703 | 0.475714 | 3.64× |
+   | 40M | 4 | 0.409035 | 0.175593 | 2.33× |
+   | 40M | 8 | 0.942097 | 0.505540 | 1.86× |
+   | 40M | 16 | 6.493433 | 0.681735 | 9.52× |
+
+   Los datos confirman el análisis: a medida que P crece, la versión bloqueante escala linealmente (más saltos serializados), mientras la no bloqueante se mantiene mucho más estable al solapar todas las transferencias. El caso más extremo es P=16, N=40M, donde la diferencia es de ~9.5× porque el pipeline bloqueante serializa 16 saltos con latencia de interconexión real, mientras el no bloqueante completa en lo que tarda el salto más lento de los 16 ejecutándose en paralelo.
 
 4. El algoritmo `mpi_matmul.c` computa una multiplicación de matrices cuadradas empleando comunicaciones punto a punto:
    - Compile y ejecute el código empleando N={512,1024,2048} usando todos los núcleos de 1 y 2 nodos. ¿Mejora el speedup y la eficiencia al pasar de 1 a 2 nodos? ¿Qué sucede con el overhead por comunicaciones?

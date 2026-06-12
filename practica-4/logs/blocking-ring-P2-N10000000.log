@@ -12,19 +12,19 @@
 
                 --> ANTES DE LA COMUNICACION <--
 
-Proceso 0 : Suma del vector enviado a 1 = 4.998984e+06
-Proceso 1 : Suma del vector enviado a 0 = 4.998824e+06
+Proceso 0 : Suma del vector enviado a 1 = 5.001348e+06
+Proceso 1 : Suma del vector enviado a 0 = 4.998947e+06
 
 ##########################################################
 
                 --> DESPUES DE LA COMUNICACION <-- 
 
-Proceso 0 : Suma del vector recibido = 4.998824e+06 : Tiempo=0.797325 segundos
-Proceso 1 : Suma del vector recibido = 4.998984e+06 : Tiempo=0.847947 segundos
+Proceso 0 : Suma del vector recibido = 4.998947e+06 : Tiempo=0.041270 segundos
+Proceso 1 : Suma del vector recibido = 5.001348e+06 : Tiempo=0.080024 segundos
 
 ##########################################################
 
- Tiempo de comunicacion : 0.120513 seconds
+ Tiempo de comunicacion : 0.079134 seconds
 
 ##########################################################
 

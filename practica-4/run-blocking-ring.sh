@@ -25,9 +25,9 @@ BIN="$BIN_DIR/blocking-ring"
 echo "==> Compilando $SRC ..."
 mpicc "$SRC" -o "$BIN" -lm
 
-# Parametros de prueba
-PROCESOS=(2 4 8)
-SIZES=(10000000 20000000)
+# Parametros de prueba (Practica 4, Ejercicio 3)
+PROCESOS=(4 8 16)
+SIZES=(10000000 20000000 40000000)
 
 echo ""
 echo "==> Ejecutando pruebas de blocking-ring ..."
@@ -39,9 +39,9 @@ for P in "${PROCESOS[@]}"; do
         
         echo "--- P=$P, N=$N ---"
         
-        # Para P=16 se requiere --oversubscribe (segun nota de la practica)
+        # --oversubscribe necesario cuando P supera los nucleos disponibles
         if [ "$P" -ge 8 ]; then
-            echo "    (usando --oversubscribe para P=8)"
+            echo "    (usando --oversubscribe)"
             mpirun --oversubscribe -np "$P" ./"$BIN" "$N" | tee "$LOGFILE"
         else
             mpirun -np "$P" ./"$BIN" "$N" | tee "$LOGFILE"

@@ -1,3 +1,0 @@
-N,tipo,procs,time_s,gflops,speedup,eff
-2048,Pthreads,8,,,,
-4096,Pthreads,8,,,,
